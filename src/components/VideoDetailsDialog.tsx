@@ -22,7 +22,7 @@ export function VideoDetailsDialog({ video, onClose }: VideoDetailsDialogProps) 
         onClick={onClose}
       >
         <motion.div
-          className="bg-card backdrop-blur-ios border border-border rounded-t-3xl sm:rounded-3xl p-6 max-w-md w-full shadow-ios-xl"
+          className="bg-card backdrop-blur-ios border border-border rounded-t-xl sm:rounded-xl p-6 max-w-md w-full shadow-ios-xl"
           initial={{ y: '100%', scale: 0.95, opacity: 0 }}
           animate={{ y: 0, scale: 1, opacity: 1 }}
           exit={{ y: '100%', scale: 0.95, opacity: 0 }}

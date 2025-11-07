@@ -4,6 +4,7 @@ export interface Video {
   creator: string;
   creatorAvatar: string;
   thumbnail: string;
+  videoUrl?: string;
   duration: number;
   progress?: number;
   uploadDate: string;
@@ -12,6 +13,8 @@ export interface Video {
   likes?: number;
   comments?: number;
   shortCategory?: 'comedy' | 'music' | 'dance' | 'educational' | 'lifestyle';
+  description?: string;
+  creatorId?: string;
 }
 
 export interface Category {

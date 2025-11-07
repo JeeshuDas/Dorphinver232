@@ -54,7 +54,7 @@ export function MiniPlayer({ video, initialTime = 0, onClose, onExpand, onProgre
 
   return (
     <motion.div
-      className="fixed left-4 right-4 z-50 rounded-3xl overflow-hidden cursor-pointer shadow-ios-xl"
+      className="fixed left-4 right-4 z-50 rounded-xl overflow-hidden cursor-pointer shadow-ios-xl"
       style={{ 
         bottom: '16px',
       }}
@@ -98,7 +98,7 @@ export function MiniPlayer({ video, initialTime = 0, onClose, onExpand, onProgre
       />
       
       {/* Subtle Border for Glass Effect */}
-      <div className="absolute inset-0 rounded-3xl border border-white/20" />
+      <div className="absolute inset-0 rounded-xl border border-white/20" />
       
       {/* Content */}
       <div className="relative">
@@ -115,7 +115,7 @@ export function MiniPlayer({ video, initialTime = 0, onClose, onExpand, onProgre
           <div className="flex items-center gap-3">
             {/* Thumbnail */}
             <motion.div
-              className="w-14 h-14 rounded-2xl shrink-0 shadow-ios"
+              className="w-14 h-14 rounded-lg shrink-0 shadow-ios"
               style={{ backgroundColor: video.thumbnail }}
               whileHover={{ scale: 1.05 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}

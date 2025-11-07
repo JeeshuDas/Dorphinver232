@@ -28,6 +28,8 @@ export default function App() {
   const [isVoiceSearchActive, setIsVoiceSearchActive] = useState(false);
   const [userAvatar, setUserAvatar] = useState('UQ');
   const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['creator-1', 'creator-2', 'creator-3', 'creator-4', 'creator-5']));
+  const [showShorts, setShowShorts] = useState(true);
+  const [shortsLimit, setShortsLimit] = useState(7);
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Apply theme class to document
@@ -64,6 +66,14 @@ export default function App() {
     if (video.category === 'long') {
       setFullScreenVideo(video);
       setCurrentScreen('video');
+    } else if (video.category === 'short') {
+      // Find the index of this short in the shorts list
+      import('./data/mockData').then(({ shortsVideos }) => {
+        const index = shortsVideos.findIndex(v => v.id === video.id);
+        setShortsStartIndex(index >= 0 ? index : 0);
+        setShortsCategoryId(undefined); // No specific category, show all shorts
+        setCurrentScreen('shorts');
+      });
     }
   };
 
@@ -130,7 +140,7 @@ export default function App() {
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
       {/* Header */}
       <AnimatePresence>
-        {currentScreen !== 'shorts' && currentScreen !== 'video' && currentScreen !== 'creator' && (
+        {currentScreen !== 'shorts' && currentScreen !== 'video' && currentScreen !== 'creator' && currentScreen !== 'home' && (
           <motion.header 
             className="shrink-0 flex items-center justify-between px-4 py-3 backdrop-blur-ios bg-background/80 z-10"
             initial={{ y: -20, opacity: 0 }}
@@ -155,13 +165,15 @@ export default function App() {
                   </motion.button>
                 )}
               </AnimatePresence>
-              <motion.img 
-                src={logoImage} 
-                alt="Dorphin" 
-                className="w-10 h-10 rounded-full shadow-ios-sm" 
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              />
+              {currentScreen !== 'profile' && (
+                <motion.img 
+                  src={logoImage} 
+                  alt="Dorphin" 
+                  className="w-10 h-10 rounded-full shadow-ios-sm" 
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                />
+              )}
             </div>
 
             {/* Search Bar (visible on home screen) */}
@@ -212,29 +224,21 @@ export default function App() {
                 Search
               </motion.h2>
             )}
-            {currentScreen === 'profile' && (
-              <motion.h2 
-                className="flex-1 mx-4"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              >
-                Profile
-              </motion.h2>
-            )}
 
             {/* Right Icons */}
-            <div className="flex items-center gap-3">
-              <motion.button
-                className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
-                onClick={() => setCurrentScreen('profile')}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                {userAvatar}
-              </motion.button>
-            </div>
+            {currentScreen !== 'profile' && (
+              <div className="flex items-center gap-3">
+                <motion.button
+                  className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
+                  onClick={() => setCurrentScreen('profile')}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                >
+                  {userAvatar}
+                </motion.button>
+              </div>
+            )}
           </motion.header>
         )}
       </AnimatePresence>
@@ -261,6 +265,9 @@ export default function App() {
                 onShortClick={handleShortClick}
                 onCreatorClick={handleCreatorClick}
                 followedCreators={followedCreators}
+                onProfileClick={() => setCurrentScreen('profile')}
+                showShorts={showShorts}
+                shortsLimit={shortsLimit}
               />
             </motion.div>
           )}
@@ -313,6 +320,8 @@ export default function App() {
                 onCollapse={handleCollapseVideo}
                 onMenuClick={setSelectedVideoDetails}
                 onVideoClick={handleVideoClick}
+                followedCreators={followedCreators}
+                onFollowCreator={handleFollowCreator}
               />
             </motion.div>
           )}
@@ -358,6 +367,10 @@ export default function App() {
                 onThemeToggle={() => setIsDarkMode(!isDarkMode)}
                 userAvatar={userAvatar}
                 onAvatarChange={setUserAvatar}
+                showShorts={showShorts}
+                onShowShortsToggle={setShowShorts}
+                shortsLimit={shortsLimit}
+                onShortsLimitChange={setShortsLimit}
               />
             </motion.div>
           )}

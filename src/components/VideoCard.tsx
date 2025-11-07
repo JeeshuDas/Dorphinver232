@@ -17,7 +17,7 @@ export function VideoCard({ video, onVideoClick }: VideoCardProps) {
   return (
     <div className="shrink-0" style={{ width: '280px' }}>
       <motion.div
-        className="relative rounded-2xl overflow-hidden cursor-pointer group shadow-ios"
+        className="relative rounded-lg overflow-hidden cursor-pointer group shadow-ios"
         style={{ width: '280px', height: '160px' }}
         onClick={() => onVideoClick?.(video)}
         whileHover={{ scale: 1.03, y: -4 }}
@@ -25,9 +25,10 @@ export function VideoCard({ video, onVideoClick }: VideoCardProps) {
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
       >
         {/* Thumbnail */}
-        <div 
-          className="absolute inset-0" 
-          style={{ backgroundColor: video.thumbnail }}
+        <img
+          src={video.thumbnail}
+          alt={video.title}
+          className="absolute inset-0 w-full h-full object-cover"
         />
 
         {/* Duration Badge - Top Right */}

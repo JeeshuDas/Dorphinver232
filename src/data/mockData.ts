@@ -1,103 +1,38 @@
 import { Video, Category, ShortsCategory, UserProfile } from '../types';
 
 export const mockVideos: Video[] = [
-  // Most Popular Videos
-  { id: '1', title: 'Amazing Sunset Timelapse', creator: 'creator account 1', creatorAvatar: '#FFD93D', thumbnail: '#FFD93D', duration: 245, views: 1200000, likes: 85000, comments: 3200, uploadDate: '2025-10-15', category: 'long' },
-  { id: '2', title: 'How to Cook Perfect Pasta', creator: 'creator account 2', creatorAvatar: '#FF8A3D', thumbnail: '#FF8A3D', duration: 180, views: 980000, likes: 72000, comments: 2800, uploadDate: '2025-10-14', category: 'long' },
-  { id: '3', title: 'City Lights at Night', creator: 'creator account 3', creatorAvatar: '#6BCB77', thumbnail: '#6BCB77', duration: 320, views: 850000, likes: 68000, comments: 2100, uploadDate: '2025-10-13', category: 'long' },
-  { id: '4', title: 'Meditation Guide', creator: 'creator account 4', creatorAvatar: '#4D96FF', thumbnail: '#4D96FF', duration: 600, views: 750000, likes: 61000, comments: 1900, uploadDate: '2025-10-12', category: 'long' },
+  // Long Videos (5)
+  { id: '1', title: 'Attack on Titan - Season Finale Review', creator: 'AnimeZone', creatorAvatar: '#FF6B9D', thumbnail: 'https://images.unsplash.com/photo-1668119064420-fb738fb05e32?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhbmltZSUyMGNoYXJhY3RlcnxlbnwxfHx8fDE3NjI0ODQzMDB8MA&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', duration: 845, views: 3200000, likes: 285000, comments: 12500, uploadDate: '2025-11-05', category: 'long' },
+  { id: '2', title: 'Live Concert - Summer Music Festival 2025', creator: 'MusicWorld', creatorAvatar: '#FFD93D', thumbnail: 'https://images.unsplash.com/photo-1545538331-78f76ca06830?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtdXNpYyUyMGNvbmNlcnQlMjBwZXJmb3JtYW5jZXxlbnwxfHx8fDE3NjI0MTM3Njh8MA&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', duration: 1240, views: 2800000, likes: 195000, comments: 8900, uploadDate: '2025-11-03', category: 'long' },
+  { id: '3', title: 'Stand-Up Comedy Special - Laugh Till You Cry', creator: 'ComedyClub', creatorAvatar: '#06D6A0', thumbnail: 'https://images.unsplash.com/photo-1610964200986-a59fe203c46d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb21lZHklMjBzdGFuZCUyMHVwfGVufDF8fHx8MTc2MjUxODQ0M3ww&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', duration: 2340, views: 4100000, likes: 342000, comments: 15800, uploadDate: '2025-11-01', category: 'long' },
+  { id: '4', title: 'Epic Gaming Tournament - Final Match', creator: 'GamerPro', creatorAvatar: '#9D4EDD', thumbnail: 'https://images.unsplash.com/photo-1635372708431-64774de60e20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBlc3BvcnRzfGVufDF8fHx8MTc2MjQ5MjAwMXww&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4', duration: 1580, views: 5200000, likes: 428000, comments: 21400, uploadDate: '2025-10-30', category: 'long' },
+  { id: '5', title: 'Cooking With Chef - Perfect Ramen Recipe', creator: 'FoodieChannel', creatorAvatar: '#FF8A3D', thumbnail: 'https://images.unsplash.com/photo-1514986888952-8cd320577b68?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb29raW5nJTIwZm9vZHxlbnwxfHx8fDE3NjI0NDY1Mjd8MA&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4', duration: 720, views: 1850000, likes: 142000, comments: 6500, uploadDate: '2025-10-28', category: 'long' },
   
-  // Trending
-  { id: '5', title: 'Tech Review 2025', creator: 'creator account 5', creatorAvatar: '#9D4EDD', thumbnail: '#9D4EDD', duration: 420, views: 650000, likes: 54000, comments: 1600, uploadDate: '2025-10-11', category: 'long' },
-  { id: '6', title: 'Travel Vlog - Tokyo', creator: 'creator account 6', creatorAvatar: '#FF6B9D', thumbnail: '#FF6B9D', duration: 540, views: 580000, likes: 48000, comments: 1400, uploadDate: '2025-10-10', category: 'long' },
-  { id: '7', title: 'Workout Routine', creator: 'creator account 7', creatorAvatar: '#06D6A0', thumbnail: '#06D6A0', duration: 300, views: 520000, likes: 42000, comments: 1200, uploadDate: '2025-10-09', category: 'long' },
-  { id: '8', title: 'Art Tutorial', creator: 'creator account 8', creatorAvatar: '#FFB627', thumbnail: '#FFB627', duration: 480, views: 480000, likes: 39000, comments: 1100, uploadDate: '2025-10-08', category: 'long' },
-  
-  // Comedy
-  { id: '9', title: 'Funny Fails Compilation', creator: 'creator account 9', creatorAvatar: '#FF5A5F', thumbnail: '#FF5A5F', duration: 360, views: 1500000, likes: 125000, comments: 4200, uploadDate: '2025-10-07', category: 'long' },
-  { id: '10', title: 'Stand Up Comedy', creator: 'creator account 10', creatorAvatar: '#FFD93D', thumbnail: '#FFD93D', duration: 420, views: 1200000, likes: 98000, comments: 3600, uploadDate: '2025-10-06', category: 'long' },
-  { id: '11', title: 'Pet Bloopers', creator: 'creator account 11', creatorAvatar: '#6BCB77', thumbnail: '#6BCB77', duration: 280, views: 980000, likes: 82000, comments: 2900, uploadDate: '2025-10-05', category: 'long' },
-  
-  // Continue Watching
-  { id: '12', title: 'Documentary Series Ep 1', creator: 'creator account 12', creatorAvatar: '#4D96FF', thumbnail: '#4D96FF', duration: 720, progress: 0.35, views: 450000, likes: 36000, comments: 980, uploadDate: '2025-10-04', category: 'long' },
-  { id: '13', title: 'Cooking Masterclass', creator: 'creator account 13', creatorAvatar: '#9D4EDD', thumbnail: '#9D4EDD', duration: 540, progress: 0.62, views: 380000, likes: 31000, comments: 850, uploadDate: '2025-10-03', category: 'long' },
-  { id: '14', title: 'Music Production Tutorial', creator: 'creator account 14', creatorAvatar: '#FF6B9D', thumbnail: '#FF6B9D', duration: 900, progress: 0.18, views: 320000, likes: 27000, comments: 720, uploadDate: '2025-10-02', category: 'long' },
-  
-  // Motivation
-  { id: '15', title: 'Morning Motivation', creator: 'creator account 15', creatorAvatar: '#06D6A0', thumbnail: '#06D6A0', duration: 180, views: 890000, likes: 74000, comments: 2600, uploadDate: '2025-10-01', category: 'long' },
-  { id: '16', title: 'Success Stories', creator: 'creator account 16', creatorAvatar: '#FFB627', thumbnail: '#FFB627', duration: 480, views: 720000, likes: 59000, comments: 2100, uploadDate: '2025-09-30', category: 'long' },
-  
-  // Comedy Shorts
-  { id: '17', title: 'Epic Fail 😂', creator: 'creator account 1', creatorAvatar: '#7B2CBF', thumbnail: '#7B2CBF', duration: 15, views: 2300000, likes: 189000, comments: 5200, uploadDate: '2025-10-15', category: 'short', shortCategory: 'comedy' },
-  { id: '18', title: 'Meme Compilation', creator: 'creator account 2', creatorAvatar: '#9D4EDD', thumbnail: '#9D4EDD', duration: 30, views: 1900000, likes: 156000, comments: 4100, uploadDate: '2025-10-14', category: 'short', shortCategory: 'comedy' },
-  { id: '19', title: 'Funny Moment', creator: 'creator account 3', creatorAvatar: '#C77DFF', thumbnail: '#C77DFF', duration: 20, views: 1600000, likes: 132000, comments: 3600, uploadDate: '2025-10-13', category: 'short', shortCategory: 'comedy' },
-  { id: '20', title: 'Prank Gone Wrong', creator: 'creator account 4', creatorAvatar: '#E0AAFF', thumbnail: '#E0AAFF', duration: 25, views: 1400000, likes: 115000, comments: 3100, uploadDate: '2025-10-12', category: 'short', shortCategory: 'comedy' },
-  { id: '21', title: 'LOL Reaction', creator: 'creator account 5', creatorAvatar: '#7B2CBF', thumbnail: '#7B2CBF', duration: 18, views: 1200000, likes: 98000, comments: 2800, uploadDate: '2025-10-11', category: 'short', shortCategory: 'comedy' },
-  { id: '22', title: 'Comedy Skit', creator: 'creator account 6', creatorAvatar: '#9D4EDD', thumbnail: '#9D4EDD', duration: 22, views: 1100000, likes: 91000, comments: 2500, uploadDate: '2025-10-10', category: 'short', shortCategory: 'comedy' },
-  
-  // Music Shorts
-  { id: '23', title: '🎵 New Beat Drop', creator: 'Music Creator 1', creatorAvatar: '#FF6B9D', thumbnail: '#FF6B9D', duration: 28, views: 1850000, likes: 152000, comments: 3900, uploadDate: '2025-10-14', category: 'short', shortCategory: 'music' },
-  { id: '24', title: 'Cover Song Magic', creator: 'Music Creator 2', creatorAvatar: '#FF8A3D', thumbnail: '#FF8A3D', duration: 32, views: 1620000, likes: 134000, comments: 3400, uploadDate: '2025-10-13', category: 'short', shortCategory: 'music' },
-  { id: '25', title: 'Guitar Riff 🎸', creator: 'Music Creator 3', creatorAvatar: '#FFD93D', thumbnail: '#FFD93D', duration: 19, views: 1450000, likes: 119000, comments: 3000, uploadDate: '2025-10-12', category: 'short', shortCategory: 'music' },
-  { id: '26', title: 'Vocal Performance', creator: 'Music Creator 4', creatorAvatar: '#06D6A0', thumbnail: '#06D6A0', duration: 27, views: 1320000, likes: 109000, comments: 2700, uploadDate: '2025-10-11', category: 'short', shortCategory: 'music' },
-  { id: '27', title: 'DJ Mix Preview', creator: 'Music Creator 5', creatorAvatar: '#4D96FF', thumbnail: '#4D96FF', duration: 30, views: 1180000, likes: 97000, comments: 2400, uploadDate: '2025-10-10', category: 'short', shortCategory: 'music' },
-  
-  // Dance Shorts
-  { id: '28', title: '💃 Trending Dance', creator: 'Dance Creator 1', creatorAvatar: '#9D4EDD', thumbnail: '#9D4EDD', duration: 21, views: 2100000, likes: 173000, comments: 4600, uploadDate: '2025-10-13', category: 'short', shortCategory: 'dance' },
-  { id: '29', title: 'Choreography Tutorial', creator: 'Dance Creator 2', creatorAvatar: '#C77DFF', thumbnail: '#C77DFF', duration: 29, views: 1720000, likes: 142000, comments: 3700, uploadDate: '2025-10-12', category: 'short', shortCategory: 'dance' },
-  { id: '30', title: 'Quick Dance', creator: 'Dance Creator 3', creatorAvatar: '#E0AAFF', thumbnail: '#E0AAFF', duration: 16, views: 1560000, likes: 128000, comments: 3300, uploadDate: '2025-10-11', category: 'short', shortCategory: 'dance' },
-  { id: '31', title: 'Dance Challenge', creator: 'Dance Creator 4', creatorAvatar: '#FF6FD8', thumbnail: '#FF6FD8', duration: 24, views: 1390000, likes: 115000, comments: 2900, uploadDate: '2025-10-10', category: 'short', shortCategory: 'dance' },
+  // Shorts (3)
+  { id: '6', title: '🎌 Anime Edit - Demon Slayer', creator: 'AnimeEdits', creatorAvatar: '#7B2CBF', thumbnail: 'https://images.unsplash.com/photo-1581833971358-2c8b550f87b3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhbmltZSUyMGFydHxlbnwxfHx8fDE3NjI0OTMwODN8MA&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', duration: 24, views: 3800000, likes: 312000, comments: 8900, uploadDate: '2025-11-06', category: 'short', shortCategory: 'anime' },
+  { id: '7', title: '🎵 DJ Mix - Electronic Beats', creator: 'DJMaster', creatorAvatar: '#F72585', thumbnail: 'https://images.unsplash.com/photo-1594623930572-300a3011d9ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtdXNpYyUyMGRqfGVufDF8fHx8MTc2MjUxODQ0NXww&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', duration: 29, views: 2950000, likes: 241000, comments: 6800, uploadDate: '2025-11-04', category: 'short', shortCategory: 'music' },
+  { id: '8', title: '😂 When WiFi Stops Working', creator: 'MemeLord', creatorAvatar: '#560BAD', thumbnail: 'https://images.unsplash.com/photo-1740950024560-3399bda3a098?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmdW5ueSUyMG1lbWV8ZW58MXx8fHwxNzYyNTE4NDQ1fDA&ixlib=rb-4.1.0&q=80&w=1080', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4', duration: 18, views: 4200000, likes: 356000, comments: 11200, uploadDate: '2025-11-02', category: 'short', shortCategory: 'comedy' },
 ];
 
 export const categories: Category[] = [
   {
-    id: 'most-popular',
-    name: 'Most Popular Videos',
-    videos: mockVideos.filter(v => [1, 2, 3, 4].includes(parseInt(v.id))),
-  },
-  {
     id: 'trending',
-    name: 'Trending',
-    videos: mockVideos.filter(v => [5, 6, 7, 8].includes(parseInt(v.id))),
-  },
-  {
-    id: 'comedy',
-    name: 'Comedy',
-    videos: mockVideos.filter(v => [9, 10, 11].includes(parseInt(v.id))),
-  },
-  {
-    id: 'continue-watching',
-    name: 'Continue Watching',
-    videos: mockVideos.filter(v => v.progress !== undefined),
-  },
-  {
-    id: 'motivation',
-    name: 'Motivation',
-    videos: mockVideos.filter(v => [15, 16].includes(parseInt(v.id))),
+    name: 'Trending Now',
+    videos: mockVideos.filter(v => v.category === 'long'),
   },
 ];
 
 export const shortsCategories: ShortsCategory[] = [
   {
-    id: 'comedy-shorts',
-    name: 'Comedy & Meme Shorts',
-    shorts: mockVideos.filter(v => v.shortCategory === 'comedy'),
-  },
-  {
-    id: 'music-shorts',
-    name: 'Music Shorts',
-    shorts: mockVideos.filter(v => v.shortCategory === 'music'),
-  },
-  {
-    id: 'dance-shorts',
-    name: 'Dance Shorts',
-    shorts: mockVideos.filter(v => v.shortCategory === 'dance'),
+    id: 'all-shorts',
+    name: 'All Shorts',
+    shorts: mockVideos.filter(v => v.category === 'short'),
   },
 ];
 
 export const shortsVideos = mockVideos.filter(v => v.category === 'short');
 
-export const categoryTags = ['ca1', 'ca2', 'ca3', 'ca4', 'ca5'];
+export const categoryTags = ['Anime', 'Music', 'Comedy', 'Gaming', 'Food'];
 
 export const userProfile: UserProfile = {
   username: 'user_account',
@@ -109,5 +44,10 @@ export const userProfile: UserProfile = {
 
 // Related videos for a given video
 export const getRelatedVideos = (videoId: string): Video[] => {
-  return mockVideos.filter(v => v.category === 'long' && v.id !== videoId).slice(0, 6);
+  return mockVideos.filter(v => v.category === 'long' && v.id !== videoId).slice(0, 3);
+};
+
+// User's uploaded videos
+export const getUserVideos = (): Video[] => {
+  return mockVideos.filter(v => v.category === 'long').slice(0, 3);
 };

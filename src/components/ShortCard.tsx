@@ -9,17 +9,17 @@ interface ShortCardProps {
 export function ShortCard({ video, onClick }: ShortCardProps) {
   return (
     <motion.div
-      className="relative rounded-2xl overflow-hidden cursor-pointer shrink-0 group shadow-ios"
+      className="relative rounded-lg overflow-hidden cursor-pointer shrink-0 group shadow-ios"
       style={{ width: '180px', height: '320px' }}
       onClick={onClick}
-      whileHover={{ scale: 1.03, y: -4 }}
       whileTap={{ scale: 0.97 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       {/* Thumbnail */}
-      <div 
-        className="absolute inset-0" 
-        style={{ backgroundColor: video.thumbnail }}
+      <img
+        src={video.thumbnail}
+        alt={video.title}
+        className="absolute inset-0 w-full h-full object-cover"
       />
 
       {/* Creator Avatar + Title - Always Visible */}

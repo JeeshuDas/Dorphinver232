@@ -34,7 +34,7 @@ export function SettingsScreen({ onBack, isDarkMode, onThemeToggle }: SettingsSc
           {/* Appearance */}
           <div>
             <h3 className="mb-4">Appearance</h3>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
               {/* Theme Toggle */}
               <div className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3">
@@ -61,7 +61,7 @@ export function SettingsScreen({ onBack, isDarkMode, onThemeToggle }: SettingsSc
           {/* Playback */}
           <div>
             <h3 className="mb-4">Playback</h3>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
               <motion.div 
                 className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
                 whileTap={{ scale: 0.98 }}
@@ -102,7 +102,7 @@ export function SettingsScreen({ onBack, isDarkMode, onThemeToggle }: SettingsSc
           {/* Notifications */}
           <div>
             <h3 className="mb-4">Notifications</h3>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
               <motion.div 
                 className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
                 whileTap={{ scale: 0.98 }}
@@ -142,7 +142,7 @@ export function SettingsScreen({ onBack, isDarkMode, onThemeToggle }: SettingsSc
           {/* Privacy */}
           <div>
             <h3 className="mb-4">Privacy</h3>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
               <motion.div 
                 className="p-4 hover:bg-accent/50 transition-colors cursor-pointer flex items-center justify-between"
                 onClick={() => {
@@ -175,7 +175,7 @@ export function SettingsScreen({ onBack, isDarkMode, onThemeToggle }: SettingsSc
           {/* About */}
           <div>
             <h3 className="mb-4">About</h3>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
               <motion.div 
                 className="p-4 hover:bg-accent/50 transition-colors cursor-pointer"
                 whileTap={{ scale: 0.98 }}

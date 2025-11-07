@@ -1,5 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
+@import url('https://fonts.cdnfonts.com/css/garet');
+
 :root {
   --font-size: 16px;
   --background: #f5f5f7;
