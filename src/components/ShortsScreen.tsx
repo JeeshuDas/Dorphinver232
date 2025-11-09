@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Video } from '../types';
 import { shortsCategories } from '../data/mockData';
-import { Smile, MessageCircle, Send, Menu, X, Heart, Share2, Play, Pause } from 'lucide-react';
+import { Smile, MessageCircle, Send, Menu, X, Heart, Share2, Play, Pause, Link, Download, Facebook, Instagram, Twitter } from 'lucide-react';
 import { motion, AnimatePresence, PanInfo } from 'motion/react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
@@ -14,6 +14,7 @@ interface ShortsScreenProps {
   startIndex?: number;
   followedCreators: Set<string>;
   onFollowCreator: (creatorId: string) => void;
+  userVideos?: Video[];
 }
 
 // Butter smooth spring config
@@ -38,12 +39,19 @@ export function ShortsScreen({
   categoryId, 
   startIndex = 0,
   followedCreators,
-  onFollowCreator
+  onFollowCreator,
+  userVideos = []
 }: ShortsScreenProps) {
   // Get shorts from the specific category or all shorts
-  const shortsArray = categoryId
+  const mockShorts = categoryId
     ? shortsCategories.find(c => c.id === categoryId)?.shorts || []
     : shortsCategories.flatMap(c => c.shorts);
+  
+  // Filter user-uploaded shorts
+  const userShorts = userVideos.filter(v => v.category === 'short');
+  
+  // Combine user shorts (first) with mock shorts
+  const shortsArray = [...userShorts, ...mockShorts];
 
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [direction, setDirection] = useState(0);
@@ -231,9 +239,21 @@ function ShortVideo({
     updateProgressFromEvent(e);
   };
 
+  const handleProgressBarTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    updateProgressFromTouchEvent(e);
+  };
+
   const handleProgressBarDrag = (e: MouseEvent) => {
     if (isDragging) {
       updateProgressFromEvent(e as any);
+    }
+  };
+
+  const handleProgressBarTouchMove = (e: TouchEvent) => {
+    if (isDragging) {
+      updateProgressFromTouchEvent(e as any);
     }
   };
 
@@ -256,14 +276,34 @@ function ShortVideo({
     }
   };
 
-  // Handle global mouse events for dragging
+  const updateProgressFromTouchEvent = (e: React.TouchEvent<HTMLDivElement> | TouchEvent) => {
+    const progressBar = progressBarRef.current;
+    const videoElement = videoRef.current;
+    
+    if (progressBar && videoElement && duration > 0) {
+      const rect = progressBar.getBoundingClientRect();
+      const touch = (e as TouchEvent).touches?.[0] || (e as React.TouchEvent<HTMLDivElement>).touches[0];
+      const clickX = touch.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      const newTime = percentage * duration;
+      
+      videoElement.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  // Handle global mouse and touch events for dragging
   useEffect(() => {
     if (isDragging) {
       window.addEventListener('mousemove', handleProgressBarDrag);
       window.addEventListener('mouseup', handleProgressBarDragEnd);
+      window.addEventListener('touchmove', handleProgressBarTouchMove);
+      window.addEventListener('touchend', handleProgressBarDragEnd);
       return () => {
         window.removeEventListener('mousemove', handleProgressBarDrag);
         window.removeEventListener('mouseup', handleProgressBarDragEnd);
+        window.removeEventListener('touchmove', handleProgressBarTouchMove);
+        window.removeEventListener('touchend', handleProgressBarDragEnd);
       };
     }
   }, [isDragging]);
@@ -364,7 +404,7 @@ function ShortVideo({
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       >
         {/* Bottom Section: Overlay Content + Action Bar */}
-        <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-8 px-6 pointer-events-auto">
+        <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-8 px-6 pointer-events-auto z-[5]">
           {/* Video Details Overlay */}
           <AnimatePresence>
             {activeOverlay === 'details' && (
@@ -472,6 +512,7 @@ function ShortVideo({
               }}
               onClick={handleProgressBarClick}
               onMouseDown={handleProgressBarDragStart}
+              onTouchStart={handleProgressBarTouchStart}
             >
               {/* Filled Progress */}
               <motion.div
@@ -594,7 +635,7 @@ function CommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: 
 
   return (
     <motion.div
-      className="w-80 aspect-square"
+      className="w-96 aspect-square"
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
@@ -660,12 +701,12 @@ function CommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: 
 
 function ShareOverlay({ video }: { video: Video }) {
   const shareOptions = [
-    { id: 'copy', icon: '🔗', color: '#3B82F6' },
-    { id: 'whatsapp', icon: '💬', color: '#10B981' },
-    { id: 'twitter', icon: '🐦', color: '#1DA1F2' },
-    { id: 'facebook', icon: '👥', color: '#4267B2' },
-    { id: 'instagram', icon: '📷', color: '#E4405F' },
-    { id: 'download', icon: '⬇️', color: '#8B5CF6' },
+    { id: 'copy', icon: Link, color: '#3B82F6', label: 'Copy Link' },
+    { id: 'whatsapp', icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
+    { id: 'twitter', icon: Twitter, color: '#1DA1F2', label: 'Twitter' },
+    { id: 'facebook', icon: Facebook, color: '#4267B2', label: 'Facebook' },
+    { id: 'instagram', icon: Instagram, color: '#E4405F', label: 'Instagram' },
+    { id: 'download', icon: Download, color: '#8B5CF6', label: 'Download' },
   ];
 
   return (
@@ -697,8 +738,8 @@ function ShareOverlay({ video }: { video: Video }) {
               key={option.id}
               className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl"
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
               }}
               whileHover={{ 
                 scale: 1.05,
@@ -712,10 +753,10 @@ function ShareOverlay({ video }: { video: Video }) {
               }}
             >
               <div 
-                className="text-3xl w-14 h-14 rounded-full flex items-center justify-center"
+                className="w-14 h-14 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: option.color + '20' }}
               >
-                {option.icon}
+                <option.icon className="w-7 h-7" style={{ color: option.color }} />
               </div>
             </motion.button>
           ))}

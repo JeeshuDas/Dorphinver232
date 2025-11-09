@@ -2,9 +2,10 @@ import { useRef, useState, useEffect } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
 import { motion, AnimatePresence } from 'motion/react';
-import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2 } from 'lucide-react';
+import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
+import { Avatar, AvatarFallback } from './ui/avatar';
 
 interface HomeScreenProps {
   onVideoClick: (video: Video) => void;
@@ -12,34 +13,149 @@ interface HomeScreenProps {
   onCreatorClick: (creatorId: string) => void;
   followedCreators: Set<string>;
   onProfileClick?: () => void;
+  onLeaderboardClick?: () => void;
+  onSearchClick?: () => void;
   showShorts?: boolean;
   shortsLimit?: number;
 }
 
-export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followedCreators, onProfileClick, showShorts = true, shortsLimit = 25 }: HomeScreenProps) {
+export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followedCreators, onProfileClick, onLeaderboardClick, onSearchClick, showShorts = true, shortsLimit = 25 }: HomeScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentlyPlayingId, setCurrentlyPlayingId] = useState<string | null>(null);
+  
+  // Drag scroll for followed creators
+  const followedScrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!followedScrollRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - followedScrollRef.current.offsetLeft);
+    setScrollLeft(followedScrollRef.current.scrollLeft);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !followedScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - followedScrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    followedScrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
   
   // Get all long videos and shorts
   const longVideos = mockVideos.filter(v => v.category === 'long');
   const shortsVideos = mockVideos.filter(v => v.category === 'short').slice(0, shortsLimit);
 
+  // Get unique creators from videos
+  const allCreators = Array.from(new Map(
+    mockVideos.map(v => [v.creator, { name: v.creator, avatar: v.creatorAvatar, id: v.creator.toLowerCase().replace(/\s+/g, '-') }])
+  ).values());
+
+  // Filter to show only followed creators
+  const followedCreatorsList = allCreators.filter(c => followedCreators.has(c.id));
+
   return (
     <div ref={containerRef} className="h-full overflow-y-auto scrollbar-hide bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 sticky top-0 bg-background/80 backdrop-blur-md z-10">
+      <div className="flex items-center justify-between px-1 py-4 sticky top-0 bg-background/80 backdrop-blur-md z-20">
         <h1 className="cursor-pointer" style={{ fontFamily: 'Garet, sans-serif', fontSize: '2rem' }} onClick={() => window.location.reload()}>dorphin</h1>
-        <motion.button
-          onClick={onProfileClick}
-          className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        />
+        <div className="flex items-center gap-2">
+          <motion.button
+            onClick={onSearchClick}
+            className="w-10 h-10 rounded-full flex items-center justify-center shadow-ios"
+            style={{
+              background: 'rgba(0, 0, 0, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          >
+            <Search className="w-4.5 h-4.5 text-muted-foreground" />
+          </motion.button>
+          <motion.button
+            onClick={onLeaderboardClick}
+            className="w-10 h-10 rounded-full flex items-center justify-center shadow-ios"
+            style={{
+              background: 'rgba(0, 0, 0, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          >
+            <Trophy className="w-4.5 h-4.5 text-muted-foreground" />
+          </motion.button>
+          <motion.button
+            onClick={onProfileClick}
+            className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          />
+        </div>
       </div>
 
+      {/* Followed Creators */}
+      {followedCreatorsList.length > 0 && (
+        <div className="px-1 mb-2">
+          <div 
+            ref={followedScrollRef}
+            className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-2 cursor-grab active:cursor-grabbing"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            style={{ userSelect: 'none' }}
+          >
+            {followedCreatorsList.map((creator, index) => (
+              <motion.button
+                key={creator.id}
+                onClick={(e) => {
+                  if (!isDragging) {
+                    onCreatorClick(creator.id);
+                  }
+                }}
+                className="shrink-0"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                  delay: index * 0.05,
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Avatar className="w-[100px] h-[100px] rounded-md shadow-ios">
+                  <AvatarFallback 
+                    className="rounded-md"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${creator.avatar}, ${creator.avatar}dd)`,
+                    }}
+                  >
+                    <User className="w-8 h-8 text-white/80" />
+                  </AvatarFallback>
+                </Avatar>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* First Square Video */}
-      <div className="px-4 mb-6 flex justify-center">
+      <div className="px-1 mb-3 flex justify-center">
         <SquareVideoCard 
           video={longVideos[0]} 
           onVideoClick={onVideoClick} 
@@ -52,14 +168,14 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
 
       {/* Shorts Row */}
       {showShorts && (
-        <div className="px-4 pb-6">
+        <div className="px-1 pb-3">
           <ShortsScrollRow shorts={shortsVideos} onVideoClick={onVideoClick} />
         </div>
       )}
 
       {/* More Square Videos */}
       {longVideos.slice(1).map((video, index) => (
-        <div key={video.id} className="px-4 mb-6 flex justify-center">
+        <div key={video.id} className="px-1 mb-3 flex justify-center">
           <SquareVideoCard 
             video={video} 
             onVideoClick={onVideoClick} 
@@ -162,7 +278,7 @@ function SquareVideoCard({
   return (
     <motion.div
       ref={cardRef}
-      className="relative w-full aspect-square rounded-xl overflow-hidden shadow-ios-lg cursor-pointer max-w-[500px]"
+      className="relative w-full aspect-square rounded overflow-hidden shadow-ios-lg cursor-pointer max-w-[500px]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -182,8 +298,17 @@ function SquareVideoCard({
       }}
       onClick={() => onVideoClick(video)}
     >
+      {/* Thumbnail (shown behind video or when not playing) */}
+      {video.thumbnail && (
+        <img
+          src={video.thumbnail}
+          alt={video.title}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+
       {/* Video Element */}
-      {video.videoUrl ? (
+      {video.videoUrl && (
         <video
           ref={videoRef}
           data-video-id={video.id}
@@ -191,11 +316,7 @@ function SquareVideoCard({
           src={video.videoUrl}
           loop
           playsInline
-        />
-      ) : (
-        <div 
-          className="absolute inset-0" 
-          style={{ backgroundColor: video.thumbnail }}
+          style={{ opacity: isPlaying ? 1 : 0 }}
         />
       )}
 
@@ -222,35 +343,39 @@ function SquareVideoCard({
         </motion.div>
       </div>
 
-      {/* Bottom Section: Overlay Content + Action Bar */}
+      {/* Overlays - Centered in video, above action bar */}
+      <AnimatePresence>
+        {activeOverlay === 'details' && (
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
+            <HomeDetailsOverlay video={video} formatNumber={formatNumber} />
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeOverlay === 'comments' && (
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
+            <HomeCommentsOverlay video={video} formatNumber={formatNumber} />
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeOverlay === 'share' && (
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
+            <HomeShareOverlay video={video} />
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Action Bar - Bottom of video */}
       <motion.div
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-auto max-w-[90%]"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto z-[5]"
         initial={{ y: 10, opacity: 0 }}
-        animate={{ y: 0, opacity: showControls ? 1 : 0 }}
+        animate={{ y: 0, opacity: (showControls || !isPlaying) ? 1 : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 35, mass: 0.6 }}
       >
-        {/* Video Details Overlay */}
-        <AnimatePresence>
-          {activeOverlay === 'details' && (
-            <HomeDetailsOverlay video={video} formatNumber={formatNumber} />
-          )}
-        </AnimatePresence>
-
-        {/* Comments Overlay */}
-        <AnimatePresence>
-          {activeOverlay === 'comments' && (
-            <HomeCommentsOverlay video={video} formatNumber={formatNumber} />
-          )}
-        </AnimatePresence>
-
-        {/* Share Overlay */}
-        <AnimatePresence>
-          {activeOverlay === 'share' && (
-            <HomeShareOverlay video={video} />
-          )}
-        </AnimatePresence>
-
-        {/* Premium Glassmorphic Action Bar - Always visible */}
+        {/* Premium Glassmorphic Action Bar */}
         <div
           className="flex items-center gap-5 px-7 py-3.5 rounded-full shadow-[0_8px_32px_0_rgba(0,0,0,0.4)]"
           style={{
@@ -362,7 +487,7 @@ function ShortCard({ video, index, onVideoClick }: { video: Video; index: number
 
   return (
     <motion.div
-      className="relative shrink-0 rounded-lg overflow-hidden shadow-ios cursor-pointer"
+      className="relative shrink-0 rounded overflow-hidden shadow-ios cursor-pointer"
       style={{
         width: 'calc((100vw - 2rem) * 0.6)',
         maxWidth: '300px',
@@ -381,19 +506,23 @@ function ShortCard({ video, index, onVideoClick }: { video: Video; index: number
       onClick={() => onVideoClick(video)}
       whileTap={{ scale: 0.98 }}
     >
-      {/* Video or Thumbnail */}
-      {video.videoUrl ? (
-        <video
+      {/* Thumbnail */}
+      {video.thumbnail && (
+        <img
+          src={video.thumbnail}
+          alt={video.title}
           className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+
+      {/* Video */}
+      {video.videoUrl && (
+        <video
+          className="absolute inset-0 w-full h-full object-cover opacity-0"
           src={video.videoUrl}
           loop
           muted
           playsInline
-        />
-      ) : (
-        <div 
-          className="absolute inset-0" 
-          style={{ backgroundColor: video.thumbnail }}
         />
       )}
 
@@ -415,7 +544,8 @@ function ShortCard({ video, index, onVideoClick }: { video: Video; index: number
 function HomeDetailsOverlay({ video, formatNumber }: { video: Video; formatNumber: (num: number) => string }) {
   return (
     <motion.div
-      className="w-64 aspect-square"
+      className="w-[85%] max-w-[420px]"
+      style={{ aspectRatio: '8/7' }}
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
@@ -481,23 +611,24 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
 
   return (
     <motion.div
-      className="w-64 aspect-square"
+      className="w-[85%] max-w-[420px]"
+      style={{ aspectRatio: '8/7' }}
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
       transition={{ type: "spring", stiffness: 300, damping: 35, mass: 0.6 }}
     >
       <div 
-        className="rounded-2xl p-5 shadow-2xl mb-3 h-full flex flex-col"
+        className="rounded-2xl p-6 shadow-2xl mb-3 h-full flex flex-col"
         style={{
-          background: 'rgba(255, 255, 255, 0.08)',
+          background: 'rgba(0, 0, 0, 0.55)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.18)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
         }}
       >
-        <h3 className="text-white text-sm mb-3 text-center flex items-center justify-center gap-2">
-          <MessageCircle className="w-4 h-4" />
+        <h3 className="text-white mb-4 text-center flex items-center justify-center gap-2">
+          <MessageCircle className="w-5 h-5" />
           Comments
         </h3>
 
@@ -526,7 +657,7 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
             placeholder="Comment..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            className="flex-1 min-h-[35px] max-h-[50px] bg-white/5 border-white/10 text-white text-xs placeholder:text-white/40"
+            className="flex-1 min-h-[35px] max-h-[45px] bg-white/5 border-white/10 text-white text-xs placeholder:text-white/40"
             onClick={(e) => e.stopPropagation()}
           />
           <Button 
@@ -547,17 +678,18 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
 
 function HomeShareOverlay({ video }: { video: Video }) {
   const shareOptions = [
-    { id: 'copy', icon: '🔗', color: '#3B82F6' },
-    { id: 'whatsapp', icon: '💬', color: '#10B981' },
-    { id: 'twitter', icon: '🐦', color: '#1DA1F2' },
-    { id: 'facebook', icon: '👥', color: '#4267B2' },
-    { id: 'instagram', icon: '📷', color: '#E4405F' },
-    { id: 'download', icon: '⬇️', color: '#8B5CF6' },
+    { id: 'copy', icon: Link, color: '#3B82F6', label: 'Copy Link' },
+    { id: 'whatsapp', icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
+    { id: 'twitter', icon: Twitter, color: '#1DA1F2', label: 'Twitter' },
+    { id: 'facebook', icon: Facebook, color: '#4267B2', label: 'Facebook' },
+    { id: 'instagram', icon: Instagram, color: '#E4405F', label: 'Instagram' },
+    { id: 'download', icon: Download, color: '#8B5CF6', label: 'Download' },
   ];
 
   return (
     <motion.div
-      className="w-64 aspect-square"
+      className="w-[85%] max-w-[420px]"
+      style={{ aspectRatio: '8/7' }}
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
@@ -566,10 +698,10 @@ function HomeShareOverlay({ video }: { video: Video }) {
       <div 
         className="rounded-2xl p-5 shadow-2xl mb-3 h-full flex flex-col"
         style={{
-          background: 'rgba(255, 255, 255, 0.08)',
+          background: 'rgba(0, 0, 0, 0.55)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.18)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
         }}
       >
         <h3 className="text-white text-sm mb-4 text-center flex items-center justify-center gap-2">
@@ -584,8 +716,8 @@ function HomeShareOverlay({ video }: { video: Video }) {
               key={option.id}
               className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl"
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
               }}
               whileHover={{ 
                 scale: 1.05,
@@ -599,10 +731,10 @@ function HomeShareOverlay({ video }: { video: Video }) {
               }}
             >
               <div 
-                className="text-2xl w-11 h-11 rounded-full flex items-center justify-center"
+                className="w-11 h-11 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: option.color + '20' }}
               >
-                {option.icon}
+                <option.icon className="w-6 h-6" style={{ color: option.color }} />
               </div>
             </motion.button>
           ))}

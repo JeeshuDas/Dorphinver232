@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Video } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, X, Film, Zap, Check } from 'lucide-react';
+import { Upload, X, Film, Zap, Check, Image as ImageIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -37,6 +37,8 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
   const [step, setStep] = useState<UploadStep>('select');
   const [videoType, setVideoType] = useState<'long' | 'short'>('long');
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   
   // Form fields
@@ -49,6 +51,19 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
     if (file && file.type.startsWith('video/')) {
       setVideoFile(file);
       setStep('details');
+    }
+  };
+
+  const handleThumbnailSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setThumbnailFile(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setThumbnailPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -72,7 +87,7 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
             creator: 'You',
             creatorId: 'user-profile',
             creatorAvatar: '#8B5CF6',
-            thumbnail: generateRandomColor(),
+            thumbnail: thumbnailPreview || generateRandomColor(),
             videoUrl: videoFile ? URL.createObjectURL(videoFile) : undefined,
             duration: Math.floor(Math.random() * 300) + 60,
             uploadDate: new Date().toISOString(),
@@ -101,6 +116,8 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
   const handleClose = () => {
     setStep('select');
     setVideoFile(null);
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
     setTitle('');
     setDescription('');
     setUploadProgress(0);
@@ -278,6 +295,47 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
                           {videoType === 'long' ? 'Long Video' : 'Short'} • {(videoFile!.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
                       </div>
+                    </div>
+
+                    {/* Thumbnail Upload */}
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Thumbnail Image</Label>
+                      <label className="block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleThumbnailSelect}
+                          className="hidden"
+                        />
+                        <motion.div
+                          className="border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary transition-colors"
+                          whileTap={{ scale: 0.98 }}
+                          transition={smoothSpring}
+                        >
+                          {thumbnailPreview ? (
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="w-16 h-16 rounded-lg bg-cover bg-center shrink-0"
+                                style={{ backgroundImage: `url(${thumbnailPreview})` }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-foreground truncate">{thumbnailFile?.name}</p>
+                                <p className="text-xs text-muted-foreground">Click to change</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                                <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm text-foreground">Add thumbnail</p>
+                                <p className="text-xs text-muted-foreground">JPG, PNG up to 10MB</p>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      </label>
                     </div>
 
                     {/* Title */}

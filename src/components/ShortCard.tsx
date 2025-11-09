@@ -16,11 +16,18 @@ export function ShortCard({ video, onClick }: ShortCardProps) {
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       {/* Thumbnail */}
-      <img
-        src={video.thumbnail}
-        alt={video.title}
-        className="absolute inset-0 w-full h-full object-cover"
-      />
+      {video.thumbnail.startsWith('#') || video.thumbnail.startsWith('rgb') ? (
+        <div 
+          className="absolute inset-0 w-full h-full"
+          style={{ backgroundColor: video.thumbnail }}
+        />
+      ) : (
+        <img
+          src={video.thumbnail}
+          alt={video.title}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
 
       {/* Creator Avatar + Title - Always Visible */}
       <div className="absolute bottom-0 left-0 right-0 p-3 gradient-overlay-bottom">

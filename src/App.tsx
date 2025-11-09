@@ -5,32 +5,84 @@ import { ShortsScreen } from './components/ShortsScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { SearchScreen } from './components/SearchScreen';
 import { CreatorProfileScreen } from './components/CreatorProfileScreen';
+import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
-import { Search, Mic, ArrowLeft } from 'lucide-react';
+import { Search, Mic, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import logoImage from 'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png';
 
-type Screen = 'home' | 'shorts' | 'search' | 'profile' | 'video' | 'creator';
+type Screen = 'home' | 'shorts' | 'search' | 'profile' | 'video' | 'creator' | 'leaderboard';
+
+interface NavigationStackEntry {
+  screen: Screen;
+  data?: {
+    creatorId?: string;
+    video?: Video;
+    shortsCategoryId?: string;
+    shortsStartIndex?: number;
+  };
+}
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
+  const [navigationStack, setNavigationStack] = useState<NavigationStackEntry[]>([{ screen: 'home' }]);
+  const currentScreen = navigationStack[navigationStack.length - 1]?.screen || 'home';
+  const currentData = navigationStack[navigationStack.length - 1]?.data;
+  
   const [miniPlayerVideo, setMiniPlayerVideo] = useState<Video | null>(null);
-  const [fullScreenVideo, setFullScreenVideo] = useState<Video | null>(null);
-  const [shortsStartIndex, setShortsStartIndex] = useState(0);
-  const [shortsCategoryId, setShortsCategoryId] = useState<string | undefined>(undefined);
   const [selectedVideoDetails, setSelectedVideoDetails] = useState<Video | null>(null);
   const [userVideos, setUserVideos] = useState<Video[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [videoProgress, setVideoProgress] = useState<Record<string, number>>({});
-  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [isVoiceSearchActive, setIsVoiceSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [userAvatar, setUserAvatar] = useState('UQ');
-  const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['creator-1', 'creator-2', 'creator-3', 'creator-4', 'creator-5']));
+  const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['animezone', 'musicworld', 'comedyclub', 'gamerpro', 'foodiechannel', 'djmaster', 'viralcontent']));
   const [showShorts, setShowShorts] = useState(true);
   const [shortsLimit, setShortsLimit] = useState(7);
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Navigation functions
+  const navigateTo = useCallback((screen: Screen, data?: NavigationStackEntry['data']) => {
+    setNavigationStack(prev => [...prev, { screen, data }]);
+    // Clear search query when leaving search screen
+    if (screen !== 'search') {
+      setSearchQuery('');
+    }
+  }, []);
+
+  const navigateBack = useCallback(() => {
+    setNavigationStack(prev => {
+      if (prev.length > 1) {
+        const newStack = prev.slice(0, -1);
+        // Clear search query when leaving search screen
+        if (prev[prev.length - 1].screen === 'search') {
+          setSearchQuery('');
+        }
+        return newStack;
+      }
+      return prev;
+    });
+  }, []);
+
+  const navigateHome = useCallback(() => {
+    setNavigationStack([{ screen: 'home' }]);
+    setSearchQuery('');
+  }, []);
+
+  const canGoBack = navigationStack.length > 1;
+
+  /**
+   * Navigation Stack Behavior:
+   * - navigateTo(screen, data): Push new screen to stack
+   * - navigateBack(): Pop current screen, return to previous
+   * - navigateHome(): Clear stack, return to home
+   * - ESC key: Go back (except in video/shorts)
+   * - Browser back button: Go back in stack
+   * - Logo click: Return to home (clears stack)
+   * - Back arrow: Navigate to previous screen in stack
+   */
 
   // Apply theme class to document
   useEffect(() => {
@@ -41,22 +93,65 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Handle keyboard navigation (ESC to go back)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && canGoBack) {
+        // Don't navigate back if we're in fullscreen video or shorts
+        if (currentScreen !== 'video' && currentScreen !== 'shorts') {
+          navigateBack();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoBack, currentScreen, navigateBack]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      if (canGoBack) {
+        navigateBack();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Push initial state
+    window.history.pushState(null, '', window.location.href);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [canGoBack, navigateBack]);
+
   const handleCollapseVideo = (video: Video, currentTime?: number) => {
     if (currentTime !== undefined) {
       setVideoProgress({ ...videoProgress, [video.id]: currentTime });
     }
     setMiniPlayerVideo(video);
-    setCurrentScreen('home');
-    setFullScreenVideo(null);
+    navigateHome();
   };
 
   const handleExpandMiniPlayer = () => {
     if (miniPlayerVideo) {
       if (miniPlayerVideo.category === 'short') {
-        setCurrentScreen('shorts');
+        // Find the index for the short video
+        import('./data/mockData').then(({ shortsVideos }) => {
+          const userShorts = userVideos.filter(v => v.category === 'short');
+          const userIndex = userShorts.findIndex(v => v.id === miniPlayerVideo.id);
+          
+          let startIndex = 0;
+          if (userIndex >= 0) {
+            startIndex = userIndex;
+          } else {
+            const mockIndex = shortsVideos.findIndex(v => v.id === miniPlayerVideo.id);
+            startIndex = mockIndex >= 0 ? userShorts.length + mockIndex : 0;
+          }
+          
+          navigateTo('shorts', { shortsStartIndex: startIndex });
+        });
       } else {
-        setFullScreenVideo(miniPlayerVideo);
-        setCurrentScreen('video');
+        navigateTo('video', { video: miniPlayerVideo });
       }
       setMiniPlayerVideo(null);
     }
@@ -64,23 +159,31 @@ export default function App() {
 
   const handleVideoClick = (video: Video) => {
     if (video.category === 'long') {
-      setFullScreenVideo(video);
-      setCurrentScreen('video');
+      navigateTo('video', { video });
     } else if (video.category === 'short') {
       // Find the index of this short in the shorts list
       import('./data/mockData').then(({ shortsVideos }) => {
-        const index = shortsVideos.findIndex(v => v.id === video.id);
-        setShortsStartIndex(index >= 0 ? index : 0);
-        setShortsCategoryId(undefined); // No specific category, show all shorts
-        setCurrentScreen('shorts');
+        // First check user videos for shorts
+        const userShorts = userVideos.filter(v => v.category === 'short');
+        const userIndex = userShorts.findIndex(v => v.id === video.id);
+        
+        let startIndex = 0;
+        if (userIndex >= 0) {
+          // Found in user videos
+          startIndex = userIndex;
+        } else {
+          // Check mock shorts
+          const mockIndex = shortsVideos.findIndex(v => v.id === video.id);
+          startIndex = mockIndex >= 0 ? userShorts.length + mockIndex : 0;
+        }
+        
+        navigateTo('shorts', { shortsStartIndex: startIndex });
       });
     }
   };
 
   const handleShortClick = (categoryId: string, startIndex: number) => {
-    setShortsCategoryId(categoryId);
-    setShortsStartIndex(startIndex);
-    setCurrentScreen('shorts');
+    navigateTo('shorts', { shortsCategoryId: categoryId, shortsStartIndex: startIndex });
   };
 
   const handleUploadVideo = (video: Video) => {
@@ -92,8 +195,7 @@ export default function App() {
   };
 
   const handleCreatorClick = (creatorId: string) => {
-    setSelectedCreatorId(creatorId);
-    setCurrentScreen('creator');
+    navigateTo('creator', { creatorId });
   };
 
   const handleProgressUpdate = useCallback((videoId: string, time: number) => {
@@ -138,11 +240,20 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
+      {/* Navigation Stack Depth Indicator (Development) */}
+      {process.env.NODE_ENV === 'development' && navigationStack.length > 1 && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
+          <div className="bg-black/70 text-white text-xs px-3 py-1 rounded-full backdrop-blur-md border border-white/20">
+            Stack: {navigationStack.length} | {navigationStack.map(s => s.screen).join(' → ')}
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <AnimatePresence>
-        {currentScreen !== 'shorts' && currentScreen !== 'video' && currentScreen !== 'creator' && currentScreen !== 'home' && (
+        {currentScreen !== 'shorts' && currentScreen !== 'video' && currentScreen !== 'creator' && currentScreen !== 'home' && currentScreen !== 'leaderboard' && (
           <motion.header 
-            className="shrink-0 flex items-center justify-between px-4 py-3 backdrop-blur-ios bg-background/80 z-10"
+            className="shrink-0 flex items-center justify-between px-4 py-3 backdrop-blur-ios bg-background/80 z-20"
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
@@ -151,9 +262,9 @@ export default function App() {
             {/* Left Side */}
             <div className="flex items-center gap-3">
               <AnimatePresence>
-                {(currentScreen === 'search' || currentScreen === 'profile') && (
+                {canGoBack && currentScreen !== 'home' && (
                   <motion.button
-                    onClick={() => setCurrentScreen('home')}
+                    onClick={navigateBack}
                     className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-smooth active:scale-95 shadow-ios-sm"
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -165,12 +276,14 @@ export default function App() {
                   </motion.button>
                 )}
               </AnimatePresence>
-              {currentScreen !== 'profile' && (
+              {currentScreen !== 'profile' && currentScreen !== 'search' && (
                 <motion.img 
                   src={logoImage} 
                   alt="Dorphin" 
-                  className="w-10 h-10 rounded-full shadow-ios-sm" 
+                  className="w-10 h-10 rounded-full shadow-ios-sm cursor-pointer" 
+                  onClick={navigateHome}
                   whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 />
               )}
@@ -188,7 +301,7 @@ export default function App() {
                   <Search className="w-5 h-5 text-muted-foreground" />
                   <span 
                     className="text-muted-foreground flex-1 cursor-pointer"
-                    onClick={() => setCurrentScreen('search')}
+                    onClick={() => navigateTo('search')}
                   >
                     {isVoiceSearchActive ? 'Listening...' : 'Search...'}
                   </span>
@@ -213,24 +326,48 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* Screen Titles */}
+            {/* Search Screen - Full Search Bar */}
             {currentScreen === 'search' && (
-              <motion.h2 
+              <motion.div
                 className="flex-1 mx-4"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.1 }}
               >
-                Search
-              </motion.h2>
+                <div className="bg-muted backdrop-blur-ios-light rounded-full px-4 py-2.5 flex items-center gap-2 shadow-ios-sm relative">
+                  <Search className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+                    autoFocus
+                  />
+                  {searchQuery && (
+                    <motion.button
+                      onClick={() => setSearchQuery('')}
+                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent transition-all shrink-0"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                    >
+                      <X className="w-4 h-4" />
+                    </motion.button>
+                  )}
+                </div>
+              </motion.div>
             )}
 
             {/* Right Icons */}
-            {currentScreen !== 'profile' && (
+            {currentScreen !== 'profile' && currentScreen !== 'search' && (
               <div className="flex items-center gap-3">
                 <motion.button
                   className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
-                  onClick={() => setCurrentScreen('profile')}
+                  onClick={() => navigateTo('profile')}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.9 }}
                   transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -265,7 +402,9 @@ export default function App() {
                 onShortClick={handleShortClick}
                 onCreatorClick={handleCreatorClick}
                 followedCreators={followedCreators}
-                onProfileClick={() => setCurrentScreen('profile')}
+                onProfileClick={() => navigateTo('profile')}
+                onLeaderboardClick={() => navigateTo('leaderboard')}
+                onSearchClick={() => navigateTo('search')}
                 showShorts={showShorts}
                 shortsLimit={shortsLimit}
               />
@@ -289,16 +428,17 @@ export default function App() {
               <ShortsScreen 
                 onCollapse={handleCollapseVideo}
                 onMenuClick={setSelectedVideoDetails}
-                onClose={() => setCurrentScreen('home')}
-                categoryId={shortsCategoryId}
-                startIndex={shortsStartIndex}
+                onClose={navigateBack}
+                categoryId={currentData?.shortsCategoryId}
+                startIndex={currentData?.shortsStartIndex || 0}
                 followedCreators={followedCreators}
                 onFollowCreator={handleFollowCreator}
+                userVideos={userVideos}
               />
             </motion.div>
           )}
 
-          {currentScreen === 'video' && fullScreenVideo && (
+          {currentScreen === 'video' && currentData?.video && (
             <motion.div
               key="video"
               initial={{ opacity: 0 }}
@@ -311,12 +451,9 @@ export default function App() {
               className="h-full bg-background"
             >
               <FullScreenVideoPlayer
-                video={fullScreenVideo}
-                initialTime={videoProgress[fullScreenVideo.id]}
-                onClose={() => {
-                  setFullScreenVideo(null);
-                  setCurrentScreen('home');
-                }}
+                video={currentData.video}
+                initialTime={videoProgress[currentData.video.id]}
+                onClose={navigateBack}
                 onCollapse={handleCollapseVideo}
                 onMenuClick={setSelectedVideoDetails}
                 onVideoClick={handleVideoClick}
@@ -340,7 +477,11 @@ export default function App() {
               }}
               className="h-full bg-background"
             >
-              <SearchScreen onVideoClick={handleVideoClick} />
+              <SearchScreen 
+                onVideoClick={handleVideoClick} 
+                onBack={navigateBack}
+                searchQuery={searchQuery}
+              />
             </motion.div>
           )}
 
@@ -375,9 +516,9 @@ export default function App() {
             </motion.div>
           )}
 
-          {currentScreen === 'creator' && selectedCreatorId && (
+          {currentScreen === 'creator' && currentData?.creatorId && (
             <motion.div
-              key={`creator-${selectedCreatorId}`}
+              key={`creator-${currentData.creatorId}`}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
@@ -390,14 +531,32 @@ export default function App() {
               className="h-full bg-background"
             >
               <CreatorProfileScreen
-                creatorId={selectedCreatorId}
-                onBack={() => {
-                  setSelectedCreatorId(null);
-                  setCurrentScreen('home');
-                }}
+                creatorId={currentData.creatorId}
+                onBack={navigateBack}
                 onVideoClick={handleVideoClick}
                 followedCreators={followedCreators}
                 onFollowCreator={handleFollowCreator}
+              />
+            </motion.div>
+          )}
+
+          {currentScreen === 'leaderboard' && (
+            <motion.div
+              key="leaderboard"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30,
+                opacity: { duration: 0.2 }
+              }}
+              className="h-full bg-background"
+            >
+              <LeaderboardScreen
+                onBack={navigateBack}
+                onCreatorClick={handleCreatorClick}
               />
             </motion.div>
           )}

@@ -25,11 +25,18 @@ export function VideoCard({ video, onVideoClick }: VideoCardProps) {
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
       >
         {/* Thumbnail */}
-        <img
-          src={video.thumbnail}
-          alt={video.title}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        {video.thumbnail.startsWith('#') || video.thumbnail.startsWith('rgb') ? (
+          <div 
+            className="absolute inset-0 w-full h-full"
+            style={{ backgroundColor: video.thumbnail }}
+          />
+        ) : (
+          <img
+            src={video.thumbnail}
+            alt={video.title}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
 
         {/* Duration Badge - Top Right */}
         <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded-lg text-white text-xs shadow-ios-sm">

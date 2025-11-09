@@ -115,7 +115,7 @@ export function CreatorProfileScreen({ creatorId, onBack, onVideoClick, followed
   return (
     <div className="h-full overflow-y-auto scrollbar-hide bg-background">
       {/* Header */}
-      <div className="sticky top-0 z-10 backdrop-blur-ios bg-background/80 px-4 py-3 flex items-center gap-3">
+      <div className="sticky top-0 z-20 backdrop-blur-ios bg-background/80 px-4 py-3 flex items-center gap-3">
         <motion.button
           onClick={onBack}
           className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shadow-ios-sm"
