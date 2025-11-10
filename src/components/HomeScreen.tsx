@@ -28,6 +28,7 @@ interface HomeScreenProps {
   comments?: Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>;
   onAddComment?: (videoId: string, text: string) => void;
   userAvatar?: string;
+  userVideos?: Video[];
 }
 
 export function HomeScreen({ 
@@ -46,7 +47,8 @@ export function HomeScreen({
   onReact,
   comments = {},
   onAddComment,
-  userAvatar = 'UP'
+  userAvatar = 'UP',
+  userVideos = []
 }: HomeScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentlyPlayingId, setCurrentlyPlayingId] = useState<string | null>(null);
@@ -81,8 +83,14 @@ export function HomeScreen({
   };
   
   // Get all long videos and shorts
-  const longVideos = mockVideos.filter(v => v.category === 'long');
-  const shortsVideos = mockVideos.filter(v => v.category === 'short').slice(0, shortsLimit);
+  // Combine user videos (newest first) with mock videos
+  const userLongVideos = userVideos.filter(v => v.category === 'long');
+  const mockLongVideos = mockVideos.filter(v => v.category === 'long');
+  const longVideos = [...userLongVideos, ...mockLongVideos];
+  
+  const userShortsVideos = userVideos.filter(v => v.category === 'short');
+  const mockShortsVideos = mockVideos.filter(v => v.category === 'short');
+  const shortsVideos = [...userShortsVideos, ...mockShortsVideos].slice(0, shortsLimit);
 
   // Get unique creators from videos
   const allCreators = Array.from(new Map(

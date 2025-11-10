@@ -509,6 +509,7 @@ export default function App() {
                 comments={videoComments}
                 onAddComment={handleAddComment}
                 userAvatar={userAvatar}
+                userVideos={userVideos}
               />
             </motion.div>
           )}
