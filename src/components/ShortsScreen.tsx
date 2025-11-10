@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Video } from '../types';
 import { shortsCategories } from '../data/mockData';
-import { Smile, MessageCircle, Send, Menu, X, Heart, Share2, Play, Pause, Link, Download, Facebook, Instagram, Twitter } from 'lucide-react';
+import { Smile, MessageCircle, Send, Menu, X, Heart, Share2, Play, Pause, Link, Download, Facebook, Instagram, Twitter, Check } from 'lucide-react';
 import { motion, AnimatePresence, PanInfo } from 'motion/react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
+import { SmileyIcon } from './SmileyIcon';
+import { toast } from 'sonner@2.0.3';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface ShortsScreenProps {
   onCollapse: (video: Video) => void;
@@ -15,6 +18,11 @@ interface ShortsScreenProps {
   followedCreators: Set<string>;
   onFollowCreator: (creatorId: string) => void;
   userVideos?: Video[];
+  currentUserId?: string;
+  reactedVideos?: Set<string>;
+  onReact?: (videoId: string) => void;
+  comments?: Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>;
+  onAddComment?: (videoId: string, text: string) => void;
 }
 
 // Butter smooth spring config
@@ -40,7 +48,12 @@ export function ShortsScreen({
   startIndex = 0,
   followedCreators,
   onFollowCreator,
-  userVideos = []
+  userVideos = [],
+  currentUserId = 'user_account',
+  reactedVideos = new Set(),
+  onReact,
+  comments = {},
+  onAddComment
 }: ShortsScreenProps) {
   // Get shorts from the specific category or all shorts
   const mockShorts = categoryId
@@ -58,7 +71,7 @@ export function ShortsScreen({
 
   const currentVideo = shortsArray[currentIndex];
 
-  const handleSwipe = (offset: number, velocity: number) => {
+  const handleSwipe = useCallback((offset: number, velocity: number) => {
     if (Math.abs(velocity) > 500 || Math.abs(offset) > 100) {
       if (offset > 0 && currentIndex > 0) {
         setDirection(-1);
@@ -68,7 +81,7 @@ export function ShortsScreen({
         setCurrentIndex(currentIndex + 1);
       }
     }
-  };
+  }, [currentIndex, shortsArray.length]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -96,12 +109,17 @@ export function ShortsScreen({
             isActive={true} 
             followedCreators={followedCreators}
             onFollowCreator={onFollowCreator}
+            currentUserId={currentUserId}
+            hasReacted={reactedVideos.has(currentVideo.id)}
+            onReact={onReact}
+            comments={comments[currentVideo.id] || []}
+            onAddComment={onAddComment}
           />
         </motion.div>
       </AnimatePresence>
 
       {/* Close Button - Top Left */}
-      <div className="absolute top-6 left-6 z-50">
+      <div className="absolute top-6 left-6 z-50 pointer-events-auto">
         <motion.button
           onClick={onClose}
           className="w-12 h-12 rounded-full flex items-center justify-center shadow-ios"
@@ -121,7 +139,7 @@ export function ShortsScreen({
 
       {/* Swipe Indicator - Top Center */}
       <motion.div 
-        className="absolute top-6 left-1/2 -translate-x-1/2 z-50"
+        className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
         initial={{ y: -10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={ultraSmoothSpring}
@@ -142,18 +160,28 @@ export function ShortsScreen({
   );
 }
 
-function ShortVideo({ 
+// Memoized ShortVideo component to prevent unnecessary re-renders
+const ShortVideo = memo(({ 
   video, 
   isActive,
   followedCreators,
-  onFollowCreator
+  onFollowCreator,
+  currentUserId = 'user_account',
+  hasReacted = false,
+  onReact,
+  comments = [],
+  onAddComment
 }: { 
   video: Video; 
   isActive: boolean;
   followedCreators: Set<string>;
   onFollowCreator: (creatorId: string) => void;
-}) {
-  const [reacted, setReacted] = useState(false);
+  currentUserId?: string;
+  hasReacted?: boolean;
+  onReact?: (videoId: string) => void;
+  comments?: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
+  onAddComment?: (videoId: string, text: string) => void;
+}) => {
   const [activeOverlay, setActiveOverlay] = useState<OverlayType>(null);
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -161,10 +189,22 @@ function ShortVideo({
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayPauseIcon, setShowPlayPauseIcon] = useState(false);
+  const [justReacted, setJustReacted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const prevReactedRef = useRef(hasReacted);
   const creatorId = video.creatorId || `creator-${video.id}`;
   const isFollowing = followedCreators.has(creatorId);
+
+  // Track when reaction changes
+  useEffect(() => {
+    if (hasReacted && !prevReactedRef.current) {
+      setJustReacted(true);
+      const timer = setTimeout(() => setJustReacted(false), 1000);
+      return () => clearTimeout(timer);
+    }
+    prevReactedRef.current = hasReacted;
+  }, [hasReacted]);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -208,60 +248,38 @@ function ShortVideo({
     return () => clearTimeout(timeout);
   }, [showControls, activeOverlay]);
 
-  const handleInteraction = () => {
+  const handleInteraction = useCallback(() => {
     if (!activeOverlay) {
       setShowControls(true);
     }
-  };
+  }, [activeOverlay]);
 
-  const formatNumber = (num: number) => {
+  const formatNumber = useCallback((num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toString();
-  };
+  }, []);
 
-  const handleFollowToggle = () => {
+  const handleFollowToggle = useCallback(() => {
     onFollowCreator(creatorId);
-  };
+  }, [onFollowCreator, creatorId]);
 
-  const toggleOverlay = (type: OverlayType) => {
-    setActiveOverlay(activeOverlay === type ? null : type);
-  };
+  const toggleOverlay = useCallback((type: OverlayType) => {
+    setActiveOverlay(prev => prev === type ? null : type);
+  }, []);
 
-  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleReaction = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    updateProgressFromEvent(e);
-  };
-
-  const handleProgressBarDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    setIsDragging(true);
-    updateProgressFromEvent(e);
-  };
-
-  const handleProgressBarTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    setIsDragging(true);
-    updateProgressFromTouchEvent(e);
-  };
-
-  const handleProgressBarDrag = (e: MouseEvent) => {
-    if (isDragging) {
-      updateProgressFromEvent(e as any);
+    if (onReact) {
+      // Use requestAnimationFrame to defer state update
+      requestAnimationFrame(() => {
+        onReact(video.id);
+      });
     }
-  };
+  }, [onReact, video.id]);
 
-  const handleProgressBarTouchMove = (e: TouchEvent) => {
-    if (isDragging) {
-      updateProgressFromTouchEvent(e as any);
-    }
-  };
-
-  const handleProgressBarDragEnd = () => {
-    setIsDragging(false);
-  };
-
-  const updateProgressFromEvent = (e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
+  // Define these functions first before they're used in other callbacks
+  const updateProgressFromEvent = useCallback((e: React.MouseEvent<HTMLDivElement> | MouseEvent) => {
     const progressBar = progressBarRef.current;
     const videoElement = videoRef.current;
     
@@ -274,9 +292,9 @@ function ShortVideo({
       videoElement.currentTime = newTime;
       setCurrentTime(newTime);
     }
-  };
+  }, [duration]);
 
-  const updateProgressFromTouchEvent = (e: React.TouchEvent<HTMLDivElement> | TouchEvent) => {
+  const updateProgressFromTouchEvent = useCallback((e: React.TouchEvent<HTMLDivElement> | TouchEvent) => {
     const progressBar = progressBarRef.current;
     const videoElement = videoRef.current;
     
@@ -290,7 +308,40 @@ function ShortVideo({
       videoElement.currentTime = newTime;
       setCurrentTime(newTime);
     }
-  };
+  }, [duration]);
+
+  const handleProgressBarClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    updateProgressFromEvent(e);
+  }, [updateProgressFromEvent]);
+
+  const handleProgressBarDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    updateProgressFromEvent(e);
+  }, [updateProgressFromEvent]);
+
+  const handleProgressBarTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    updateProgressFromTouchEvent(e);
+  }, [updateProgressFromTouchEvent]);
+
+  const handleProgressBarDrag = useCallback((e: MouseEvent) => {
+    if (isDragging) {
+      updateProgressFromEvent(e as any);
+    }
+  }, [isDragging, updateProgressFromEvent]);
+
+  const handleProgressBarTouchMove = useCallback((e: TouchEvent) => {
+    if (isDragging) {
+      updateProgressFromTouchEvent(e as any);
+    }
+  }, [isDragging, updateProgressFromTouchEvent]);
+
+  const handleProgressBarDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
   // Handle global mouse and touch events for dragging
   useEffect(() => {
@@ -306,15 +357,15 @@ function ShortVideo({
         window.removeEventListener('touchend', handleProgressBarDragEnd);
       };
     }
-  }, [isDragging]);
+  }, [isDragging, handleProgressBarDrag, handleProgressBarDragEnd, handleProgressBarTouchMove]);
 
-  const formatTime = (seconds: number) => {
+  const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
-  const togglePlayPause = (e: React.MouseEvent) => {
+  const togglePlayPause = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const videoElement = videoRef.current;
     if (!videoElement) return;
@@ -330,7 +381,7 @@ function ShortVideo({
     // Show play/pause icon feedback
     setShowPlayPauseIcon(true);
     setTimeout(() => setShowPlayPauseIcon(false), 500);
-  };
+  }, [isPlaying]);
 
   return (
     <div 
@@ -338,20 +389,11 @@ function ShortVideo({
       onMouseMove={handleInteraction}
       onTouchStart={handleInteraction}
     >
-      {/* Thumbnail (shown behind video) */}
-      {video.thumbnail && (
-        <img
-          src={video.thumbnail}
-          alt={video.title}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
-
       {/* Video Content */}
       {video.videoUrl ? (
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-contain cursor-pointer bg-black/50"
+          className="absolute inset-0 w-full h-full object-contain cursor-pointer bg-black z-10"
           src={video.videoUrl}
           loop
           playsInline
@@ -359,7 +401,7 @@ function ShortVideo({
         />
       ) : (
         <div 
-          className="absolute inset-0 cursor-pointer" 
+          className="absolute inset-0 cursor-pointer z-10" 
           onClick={togglePlayPause}
         >
           <div className="absolute inset-0 flex items-center justify-center">
@@ -396,42 +438,15 @@ function ShortVideo({
         )}
       </AnimatePresence>
 
-      {/* Controls Overlay */}
+      {/* Action Bar - Always visible at bottom */}
       <motion.div 
-        className="absolute inset-0 z-30 pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 z-30 pb-8 px-6 pointer-events-none"
         initial={{ opacity: 1 }}
         animate={{ opacity: showControls ? 1 : 0 }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        {/* Bottom Section: Overlay Content + Action Bar */}
-        <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-8 px-6 pointer-events-auto z-[5]">
-          {/* Video Details Overlay */}
-          <AnimatePresence>
-            {activeOverlay === 'details' && (
-              <DetailsOverlay 
-                video={video} 
-                isFollowing={isFollowing}
-                onFollowToggle={handleFollowToggle}
-                formatNumber={formatNumber}
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Comments Overlay */}
-          <AnimatePresence>
-            {activeOverlay === 'comments' && (
-              <CommentsOverlay video={video} formatNumber={formatNumber} />
-            )}
-          </AnimatePresence>
-
-          {/* Share Overlay */}
-          <AnimatePresence>
-            {activeOverlay === 'share' && (
-              <ShareOverlay video={video} />
-            )}
-          </AnimatePresence>
-
-          {/* Premium Glassmorphic Action Bar - Always visible */}
+        <div className="flex flex-col items-center gap-3 pointer-events-auto">
+          {/* Premium Glassmorphic Action Bar */}
           <div
             className="flex items-center gap-6 px-8 py-4 rounded-full"
             style={{
@@ -448,14 +463,13 @@ function ShortVideo({
               whileHover={{ scale: 1.12, y: -3 }}
               whileTap={{ scale: 0.88 }}
               transition={smoothSpring}
-              onClick={(e) => {
-                e.stopPropagation();
-                setReacted(!reacted);
-              }}
+              onClick={handleReaction}
             >
-              <Smile 
-                className={`w-7 h-7 transition-colors duration-200 ${reacted ? 'fill-yellow-400 text-yellow-400' : 'text-white/90'}`}
-              />
+              {hasReacted ? (
+                <SmileyIcon className="w-7 h-7" color="#EAB308" animated={justReacted} />
+              ) : (
+                <Smile className="w-7 h-7 text-white/90" />
+              )}
             </motion.button>
 
             {/* Comment Button */}
@@ -539,32 +553,81 @@ function ShortVideo({
           </div>
         </div>
       </motion.div>
+
+      {/* Overlays - Positioned at bottom, no full-screen blocking */}
+      <AnimatePresence>
+        {activeOverlay === 'details' && (
+          <div className="absolute bottom-[152px] left-0 right-0 flex justify-center px-6 z-40 pointer-events-none">
+            <div className="pointer-events-auto">
+              <DetailsOverlay 
+                video={video} 
+                isFollowing={isFollowing}
+                onFollowToggle={handleFollowToggle}
+                formatNumber={formatNumber}
+                currentUserId={currentUserId}
+              />
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeOverlay === 'comments' && (
+          <div className="absolute bottom-[152px] left-0 right-0 flex justify-center px-6 z-40 pointer-events-none">
+            <div className="pointer-events-auto">
+              <CommentsOverlay 
+                video={video} 
+                formatNumber={formatNumber}
+                comments={comments}
+                onAddComment={onAddComment}
+              />
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeOverlay === 'share' && (
+          <div className="absolute bottom-[152px] left-0 right-0 flex justify-center px-6 z-40 pointer-events-none">
+            <div className="pointer-events-auto">
+              <ShareOverlay video={video} />
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
-}
+});
 
-// Shared Components
-function DetailsOverlay({ 
+ShortVideo.displayName = 'ShortVideo';
+
+// Shared Components - Memoized for performance
+const DetailsOverlay = memo(({ 
   video, 
   isFollowing, 
   onFollowToggle, 
-  formatNumber 
+  formatNumber,
+  currentUserId 
 }: { 
   video: Video; 
   isFollowing: boolean; 
   onFollowToggle: () => void; 
   formatNumber: (num: number) => string;
-}) {
+  currentUserId: string;
+}) => {
+  const creatorId = video.creatorId || video.creator.toLowerCase().replace(/\s+/g, '-');
+  const isOwnVideo = creatorId === currentUserId;
+
   return (
     <motion.div
-      className="w-80 aspect-square"
+      className="w-80 max-h-[70vh]"
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
       transition={ultraSmoothSpring}
     >
       <div 
-        className="rounded-2xl p-6 shadow-2xl mb-3 h-full flex flex-col"
+        className="rounded-2xl p-5 shadow-2xl mb-3 flex flex-col overflow-y-auto max-h-[70vh]"
         style={{
           background: 'rgba(0, 0, 0, 0.55)',
           backdropFilter: 'blur(40px) saturate(180%)',
@@ -573,76 +636,103 @@ function DetailsOverlay({
         }}
       >
         {/* Creator Info */}
-        <div className="flex flex-col items-center text-center mb-5">
+        <div className="flex flex-col items-center text-center mb-4">
           <div 
-            className="w-16 h-16 rounded-full mb-3 shadow-ios"
+            className="w-14 h-14 rounded-lg mb-2 shadow-ios"
             style={{ backgroundColor: video.creatorAvatar }}
           />
-          <p className="text-white">{video.creator}</p>
-          <Button
-            size="sm"
-            variant={isFollowing ? "secondary" : "default"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onFollowToggle();
-            }}
-            className="mt-3 w-full"
-          >
-            {isFollowing ? 'Following' : 'Follow'}
-          </Button>
+          <p className="text-white text-sm">{video.creator}</p>
+          {!isOwnVideo && (
+            <Button
+              size="sm"
+              variant={isFollowing ? "secondary" : "default"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onFollowToggle();
+              }}
+              className="mt-2 w-full"
+            >
+              {isFollowing ? 'Following' : 'Follow'}
+            </Button>
+          )}
         </div>
 
         {/* Video Title */}
-        <div className="mb-auto">
-          <h3 className="text-white text-center mb-2">{video.title}</h3>
-          <p className="text-white/60 text-sm text-center leading-relaxed line-clamp-3">
+        <div className="mb-4">
+          <h3 className="text-white text-center mb-1.5 text-sm">{video.title}</h3>
+          <p className="text-white/60 text-xs text-center leading-relaxed line-clamp-4">
             {video.description || `An amazing short by ${video.creator}.`}
           </p>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-xl">👁️</span>
-            <span className="text-white/80 text-sm">{formatNumber(video.views)}</span>
+        <div className="grid grid-cols-3 gap-3 pt-3 border-t border-white/10">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-lg">👁️</span>
+            <span className="text-white/80 text-xs">{formatNumber(video.views)}</span>
           </div>
           {video.likes !== undefined && (
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-xl">❤️</span>
-              <span className="text-white/80 text-sm">{formatNumber(video.likes)}</span>
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-lg">❤️</span>
+              <span className="text-white/80 text-xs">{formatNumber(video.likes)}</span>
             </div>
           )}
           {video.comments !== undefined && (
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-xl">💬</span>
-              <span className="text-white/80 text-sm">{formatNumber(video.comments)}</span>
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-lg">💬</span>
+              <span className="text-white/80 text-xs">{formatNumber(video.comments)}</span>
             </div>
           )}
         </div>
       </div>
     </motion.div>
   );
-}
+});
 
-function CommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: (num: number) => string }) {
+DetailsOverlay.displayName = 'DetailsOverlay';
+
+const CommentsOverlay = memo(({ 
+  video, 
+  formatNumber,
+  comments,
+  onAddComment 
+}: { 
+  video: Video; 
+  formatNumber: (num: number) => string;
+  comments: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
+  onAddComment?: (videoId: string, text: string) => void;
+}) => {
   const [newComment, setNewComment] = useState('');
   
   const mockComments = [
-    { id: 1, user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', likes: 42, time: '2h' },
-    { id: 2, user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', likes: 28, time: '5h' },
-    { id: 3, user: 'Mike Johnson', avatar: '#10B981', text: 'Can\'t stop watching', likes: 15, time: '1d' },
+    { id: '1', user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', time: '2h' },
+    { id: '2', user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', time: '5h' },
+    { id: '3', user: 'Mike Johnson', avatar: '#10B981', text: 'Can\'t stop watching', time: '1d' },
   ];
+
+  const displayComments = comments.length > 0 ? comments : mockComments;
+
+  const handlePostComment = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (newComment.trim() && onAddComment) {
+      // Use requestAnimationFrame to defer state update
+      requestAnimationFrame(() => {
+        onAddComment(video.id, newComment.trim());
+        setNewComment('');
+      });
+    }
+  }, [newComment, onAddComment, video.id]);
 
   return (
     <motion.div
-      className="w-96 aspect-square"
+      className="w-80 max-h-[60vh]"
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
       transition={ultraSmoothSpring}
     >
       <div 
-        className="rounded-2xl p-6 shadow-2xl mb-3 h-full flex flex-col"
+        className="rounded-2xl p-5 shadow-2xl mb-3 flex flex-col max-h-[60vh]"
         style={{
           background: 'rgba(0, 0, 0, 0.55)',
           backdropFilter: 'blur(40px) saturate(180%)',
@@ -650,46 +740,50 @@ function CommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: 
           border: '1px solid rgba(255, 255, 255, 0.15)',
         }}
       >
-        <h3 className="text-white mb-4 text-center flex items-center justify-center gap-2">
-          <MessageCircle className="w-5 h-5" />
-          Comments
+        <h3 className="text-white mb-3 text-center flex items-center justify-center gap-2 text-sm">
+          <MessageCircle className="w-4 h-4" />
+          Comments ({displayComments.length})
         </h3>
 
         {/* Comments List */}
-        <div className="space-y-3 mb-4 overflow-y-auto flex-1 scrollbar-hide">
-          {mockComments.map((comment) => (
+        <div className="space-y-2.5 mb-3 overflow-y-auto flex-1 scrollbar-hide">
+          {displayComments.map((comment) => (
             <div key={comment.id} className="flex gap-2">
               <div 
-                className="w-8 h-8 rounded-full shrink-0"
+                className="w-7 h-7 rounded-full shrink-0"
                 style={{ backgroundColor: comment.avatar }}
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-white text-sm truncate">{comment.user}</p>
-                  <span className="text-white/40 text-xs">{comment.time}</span>
+                  <p className="text-white text-xs truncate">{comment.user}</p>
+                  <span className="text-white/40 text-[10px]">{comment.time}</span>
                 </div>
-                <p className="text-white/70 text-sm">{comment.text}</p>
+                <p className="text-white/70 text-xs leading-relaxed">{comment.text}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Add Comment */}
-        <div className="flex gap-2 pt-3 border-t border-white/10">
+        <div className="flex gap-2 pt-2.5 border-t border-white/10">
           <Textarea
-            placeholder="Comment..."
+            placeholder="Add a comment..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            className="flex-1 min-h-[40px] max-h-[60px] bg-white/5 border-white/10 text-white placeholder:text-white/40 text-sm"
+            className="flex-1 min-h-[40px] max-h-[60px] bg-white/5 border-white/10 text-white placeholder:text-white/40 text-xs resize-none"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handlePostComment(e as any);
+              }
+            }}
           />
           <Button 
             size="sm" 
-            onClick={(e) => {
-              e.stopPropagation();
-              setNewComment('');
-            }}
-            className="shrink-0 self-end"
+            onClick={handlePostComment}
+            disabled={!newComment.trim()}
+            className="shrink-0 self-end h-[40px]"
           >
             Post
           </Button>
@@ -697,11 +791,59 @@ function CommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: 
       </div>
     </motion.div>
   );
-}
+});
 
-function ShareOverlay({ video }: { video: Video }) {
+CommentsOverlay.displayName = 'CommentsOverlay';
+
+const ShareOverlay = memo(({ video }: { video: Video }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async (platform: string) => {
+    const videoUrl = `${window.location.origin}/?video=${video.id}`;
+    const text = `Check out "${video.title}" by ${video.creator}`;
+    
+    switch (platform) {
+      case 'copy':
+        const copySuccess = await copyToClipboard(videoUrl);
+        if (copySuccess) {
+          setCopied(true);
+          toast.success('Link copied to clipboard!');
+          setTimeout(() => setCopied(false), 2000);
+        } else {
+          toast.error('Failed to copy link');
+        }
+        break;
+      case 'whatsapp':
+        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + videoUrl)}`, '_blank');
+        break;
+      case 'twitter':
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(videoUrl)}`, '_blank');
+        break;
+      case 'facebook':
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(videoUrl)}`, '_blank');
+        break;
+      case 'instagram':
+        const igSuccess = await copyToClipboard(videoUrl);
+        if (igSuccess) {
+          toast.info('Link copied! Share it on Instagram');
+        } else {
+          toast.error('Failed to copy link');
+        }
+        break;
+      case 'download':
+        if (video.videoUrl) {
+          const a = document.createElement('a');
+          a.href = video.videoUrl;
+          a.download = `${video.title}.mp4`;
+          a.click();
+          toast.success('Download started!');
+        }
+        break;
+    }
+  }, [video.id, video.title, video.creator, video.videoUrl, copied]);
+
   const shareOptions = [
-    { id: 'copy', icon: Link, color: '#3B82F6', label: 'Copy Link' },
+    { id: 'copy', icon: copied ? Check : Link, color: copied ? '#10B981' : '#3B82F6', label: 'Copy Link' },
     { id: 'whatsapp', icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
     { id: 'twitter', icon: Twitter, color: '#1DA1F2', label: 'Twitter' },
     { id: 'facebook', icon: Facebook, color: '#4267B2', label: 'Facebook' },
@@ -711,14 +853,14 @@ function ShareOverlay({ video }: { video: Video }) {
 
   return (
     <motion.div
-      className="w-80 aspect-square"
+      className="w-80 max-h-[60vh]"
       initial={{ y: 20, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 20, opacity: 0, scale: 0.95 }}
       transition={ultraSmoothSpring}
     >
       <div 
-        className="rounded-2xl p-6 shadow-2xl mb-3 h-full flex flex-col"
+        className="rounded-2xl p-5 shadow-2xl mb-3 flex flex-col"
         style={{
           background: 'rgba(0, 0, 0, 0.55)',
           backdropFilter: 'blur(40px) saturate(180%)',
@@ -726,17 +868,17 @@ function ShareOverlay({ video }: { video: Video }) {
           border: '1px solid rgba(255, 255, 255, 0.15)',
         }}
       >
-        <h3 className="text-white mb-6 text-center flex items-center justify-center gap-2">
-          <Share2 className="w-5 h-5" />
+        <h3 className="text-white mb-4 text-center flex items-center justify-center gap-2 text-sm">
+          <Share2 className="w-4 h-4" />
           Share
         </h3>
 
         {/* Share Options Grid */}
-        <div className="grid grid-cols-3 gap-4 flex-1 content-start">
+        <div className="grid grid-cols-3 gap-3">
           {shareOptions.map((option) => (
             <motion.button
               key={option.id}
-              className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl"
+              className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl"
               style={{
                 background: 'rgba(0, 0, 0, 0.35)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -749,19 +891,22 @@ function ShareOverlay({ video }: { video: Video }) {
               transition={smoothSpring}
               onClick={(e) => {
                 e.stopPropagation();
-                // Handle share action
+                handleShare(option.id);
               }}
             >
               <div 
-                className="w-14 h-14 rounded-full flex items-center justify-center"
+                className="w-12 h-12 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: option.color + '20' }}
               >
-                <option.icon className="w-7 h-7" style={{ color: option.color }} />
+                <option.icon className="w-6 h-6" style={{ color: option.color }} />
               </div>
+              <span className="text-white text-[10px]">{option.label}</span>
             </motion.button>
           ))}
         </div>
       </div>
     </motion.div>
   );
-}
+});
+
+ShareOverlay.displayName = 'ShareOverlay';

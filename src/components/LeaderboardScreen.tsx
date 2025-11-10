@@ -100,7 +100,7 @@ export function LeaderboardScreen({ onBack, onCreatorClick }: LeaderboardScreenP
 
             {/* Creator Avatar */}
             <div
-              className="w-12 h-12 rounded-full shrink-0 shadow-ios-sm"
+              className="w-12 h-12 rounded-lg shrink-0 shadow-ios-sm"
               style={{ backgroundColor: creator.creatorAvatar }}
             />
 

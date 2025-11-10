@@ -11,6 +11,7 @@ import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
 import { Search, Mic, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Toaster } from './components/ui/sonner';
 import logoImage from 'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png';
 
 type Screen = 'home' | 'shorts' | 'search' | 'profile' | 'video' | 'creator' | 'leaderboard';
@@ -23,6 +24,7 @@ interface NavigationStackEntry {
     shortsCategoryId?: string;
     shortsStartIndex?: number;
   };
+  scrollPosition?: number;
 }
 
 export default function App() {
@@ -38,21 +40,54 @@ export default function App() {
   const [isVoiceSearchActive, setIsVoiceSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [userAvatar, setUserAvatar] = useState('UQ');
+  const [userDisplayName, setUserDisplayName] = useState('Your Profile');
+  const [userBio, setUserBio] = useState('');
   const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['animezone', 'musicworld', 'comedyclub', 'gamerpro', 'foodiechannel', 'djmaster', 'viralcontent']));
   const [showShorts, setShowShorts] = useState(true);
   const [shortsLimit, setShortsLimit] = useState(7);
+  const [videoComments, setVideoComments] = useState<Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>>({});
+  const [reactedVideos, setReactedVideos] = useState<Set<string>>(new Set());
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout>();
+  const screenContainerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Save current scroll position before navigating
+  const saveScrollPosition = useCallback(() => {
+    setNavigationStack(prev => {
+      if (prev.length === 0) return prev;
+      
+      const currentEntry = prev[prev.length - 1];
+      const wrapper = screenContainerRefs.current[currentEntry.screen];
+      
+      if (!wrapper) return prev;
+      
+      // Find the first scrollable child
+      const scrollable = wrapper.querySelector('[class*="overflow-y-auto"], [class*="overflow-auto"]') as HTMLElement;
+      const scrollTop = scrollable?.scrollTop || 0;
+      
+      const newStack = [...prev];
+      newStack[newStack.length - 1] = {
+        ...newStack[newStack.length - 1],
+        scrollPosition: scrollTop
+      };
+      
+      return newStack;
+    });
+  }, []);
 
   // Navigation functions
   const navigateTo = useCallback((screen: Screen, data?: NavigationStackEntry['data']) => {
+    saveScrollPosition();
     setNavigationStack(prev => [...prev, { screen, data }]);
     // Clear search query when leaving search screen
     if (screen !== 'search') {
       setSearchQuery('');
     }
-  }, []);
+    // Close any open video details when navigating
+    setSelectedVideoDetails(null);
+  }, [saveScrollPosition]);
 
   const navigateBack = useCallback(() => {
+    saveScrollPosition();
     setNavigationStack(prev => {
       if (prev.length > 1) {
         const newStack = prev.slice(0, -1);
@@ -64,12 +99,17 @@ export default function App() {
       }
       return prev;
     });
-  }, []);
+    // Close any open video details when navigating back
+    setSelectedVideoDetails(null);
+  }, [saveScrollPosition]);
 
   const navigateHome = useCallback(() => {
+    saveScrollPosition();
     setNavigationStack([{ screen: 'home' }]);
     setSearchQuery('');
-  }, []);
+    // Close any open video details when navigating home
+    setSelectedVideoDetails(null);
+  }, [saveScrollPosition]);
 
   const canGoBack = navigationStack.length > 1;
 
@@ -82,7 +122,34 @@ export default function App() {
    * - Browser back button: Go back in stack
    * - Logo click: Return to home (clears stack)
    * - Back arrow: Navigate to previous screen in stack
+   * 
+   * Scroll Restoration:
+   * - Scroll positions are saved in the navigation stack
+   * - When navigating back, scroll position is restored
+   * - Works by finding scrollable elements (overflow-y-auto/overflow-auto)
    */
+
+  // Restore scroll position when navigating back
+  useEffect(() => {
+    const currentEntry = navigationStack[navigationStack.length - 1];
+    if (currentEntry?.scrollPosition !== undefined) {
+      // Use multiple requestAnimationFrame and a small timeout to ensure animations complete
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const wrapper = screenContainerRefs.current[currentEntry.screen];
+            if (wrapper) {
+              // Find the first scrollable child (with overflow-y-auto or overflow-auto)
+              const scrollable = wrapper.querySelector('[class*="overflow-y-auto"], [class*="overflow-auto"]') as HTMLElement;
+              if (scrollable) {
+                scrollable.scrollTop = currentEntry.scrollPosition;
+              }
+            }
+          }, 50); // Small delay to ensure content is rendered
+        });
+      });
+    }
+  }, [currentScreen]);
 
   // Apply theme class to document
   useEffect(() => {
@@ -237,6 +304,33 @@ export default function App() {
       return newSet;
     });
   };
+
+  const handleAddComment = useCallback((videoId: string, text: string) => {
+    const newComment = {
+      id: Date.now().toString(),
+      user: userDisplayName,
+      avatar: '#FF6B9D',
+      text,
+      time: 'just now'
+    };
+    
+    setVideoComments(prev => ({
+      ...prev,
+      [videoId]: [newComment, ...(prev[videoId] || [])]
+    }));
+  }, [userDisplayName]);
+
+  const handleReactToVideo = useCallback((videoId: string) => {
+    setReactedVideos(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(videoId)) {
+        newSet.delete(videoId);
+      } else {
+        newSet.add(videoId);
+      }
+      return newSet;
+    });
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
@@ -396,24 +490,32 @@ export default function App() {
                 opacity: { duration: 0.2 }
               }}
               className="h-full bg-background"
+              ref={(el) => { screenContainerRefs.current['home'] = el; }}
             >
               <HomeScreen 
                 onVideoClick={handleVideoClick}
                 onShortClick={handleShortClick}
                 onCreatorClick={handleCreatorClick}
                 followedCreators={followedCreators}
+                onFollowCreator={handleFollowCreator}
                 onProfileClick={() => navigateTo('profile')}
                 onLeaderboardClick={() => navigateTo('leaderboard')}
                 onSearchClick={() => navigateTo('search')}
                 showShorts={showShorts}
                 shortsLimit={shortsLimit}
+                currentUserId="user_account"
+                reactedVideos={reactedVideos}
+                onReact={handleReactToVideo}
+                comments={videoComments}
+                onAddComment={handleAddComment}
+                userAvatar={userAvatar}
               />
             </motion.div>
           )}
 
           {currentScreen === 'shorts' && (
             <motion.div
-              key="shorts"
+              key={`shorts-${currentData?.shortsStartIndex || 0}`}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -426,6 +528,7 @@ export default function App() {
               className="h-full bg-background"
             >
               <ShortsScreen 
+                key={`shorts-screen-${currentData?.shortsStartIndex || 0}`}
                 onCollapse={handleCollapseVideo}
                 onMenuClick={setSelectedVideoDetails}
                 onClose={navigateBack}
@@ -434,13 +537,18 @@ export default function App() {
                 followedCreators={followedCreators}
                 onFollowCreator={handleFollowCreator}
                 userVideos={userVideos}
+                currentUserId="user_account"
+                reactedVideos={reactedVideos}
+                onReact={handleReactToVideo}
+                comments={videoComments}
+                onAddComment={handleAddComment}
               />
             </motion.div>
           )}
 
           {currentScreen === 'video' && currentData?.video && (
             <motion.div
-              key="video"
+              key={`video-${currentData.video.id}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -451,6 +559,7 @@ export default function App() {
               className="h-full bg-background"
             >
               <FullScreenVideoPlayer
+                key={currentData.video.id}
                 video={currentData.video}
                 initialTime={videoProgress[currentData.video.id]}
                 onClose={navigateBack}
@@ -459,6 +568,11 @@ export default function App() {
                 onVideoClick={handleVideoClick}
                 followedCreators={followedCreators}
                 onFollowCreator={handleFollowCreator}
+                currentUserId="user_account"
+                comments={videoComments[currentData.video.id] || []}
+                onAddComment={(text) => handleAddComment(currentData.video.id, text)}
+                hasReacted={reactedVideos.has(currentData.video.id)}
+                onReact={() => handleReactToVideo(currentData.video.id)}
               />
             </motion.div>
           )}
@@ -476,6 +590,7 @@ export default function App() {
                 opacity: { duration: 0.2 }
               }}
               className="h-full bg-background"
+              ref={(el) => { screenContainerRefs.current['search'] = el; }}
             >
               <SearchScreen 
                 onVideoClick={handleVideoClick} 
@@ -498,6 +613,7 @@ export default function App() {
                 opacity: { duration: 0.2 }
               }}
               className="h-full bg-background"
+              ref={(el) => { screenContainerRefs.current['profile'] = el; }}
             >
               <ProfileScreen
                 userVideos={userVideos}
@@ -508,6 +624,10 @@ export default function App() {
                 onThemeToggle={() => setIsDarkMode(!isDarkMode)}
                 userAvatar={userAvatar}
                 onAvatarChange={setUserAvatar}
+                userDisplayName={userDisplayName}
+                onDisplayNameChange={setUserDisplayName}
+                userBio={userBio}
+                onBioChange={setUserBio}
                 showShorts={showShorts}
                 onShowShortsToggle={setShowShorts}
                 shortsLimit={shortsLimit}
@@ -529,6 +649,7 @@ export default function App() {
                 opacity: { duration: 0.2 }
               }}
               className="h-full bg-background"
+              ref={(el) => { screenContainerRefs.current['creator'] = el; }}
             >
               <CreatorProfileScreen
                 creatorId={currentData.creatorId}
@@ -553,6 +674,7 @@ export default function App() {
                 opacity: { duration: 0.2 }
               }}
               className="h-full bg-background"
+              ref={(el) => { screenContainerRefs.current['leaderboard'] = el; }}
             >
               <LeaderboardScreen
                 onBack={navigateBack}
@@ -581,7 +703,13 @@ export default function App() {
       <VideoDetailsDialog
         video={selectedVideoDetails}
         onClose={() => setSelectedVideoDetails(null)}
+        followedCreators={followedCreators}
+        onFollowCreator={handleFollowCreator}
+        currentUserId="user_account"
       />
+
+      {/* Toast Notifications */}
+      <Toaster />
     </div>
   );
 }

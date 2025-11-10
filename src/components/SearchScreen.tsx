@@ -77,7 +77,7 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
                 {/* Creator Info with Avatar */}
                 <div className="flex items-center gap-1.5">
                   <div 
-                    className="w-4 h-4 rounded-full shrink-0 shadow-ios-sm"
+                    className="w-4 h-4 rounded-sm shrink-0 shadow-ios-sm"
                     style={{ backgroundColor: video.creatorAvatar }}
                   />
                   <p className="text-muted-foreground/70 text-sm truncate">

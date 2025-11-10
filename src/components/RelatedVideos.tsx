@@ -50,7 +50,7 @@ export function RelatedVideos({ videos, onVideoClick }: RelatedVideosProps) {
                 {/* Creator Info with Avatar */}
                 <div className="flex items-center gap-2">
                   <div 
-                    className="w-5 h-5 rounded-full shrink-0 shadow-ios-sm"
+                    className="w-5 h-5 rounded-sm shrink-0 shadow-ios-sm"
                     style={{ backgroundColor: video.creatorAvatar }}
                   />
                   <div className="flex-1 min-w-0">

@@ -1,15 +1,28 @@
 import { Video } from '../types';
-import { X, Flag } from 'lucide-react';
+import { X, Flag, UserPlus, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/button';
 
 interface VideoDetailsDialogProps {
   video: Video | null;
   onClose: () => void;
+  followedCreators?: Set<string>;
+  onFollowCreator?: (creatorId: string) => void;
+  currentUserId?: string;
 }
 
-export function VideoDetailsDialog({ video, onClose }: VideoDetailsDialogProps) {
+export function VideoDetailsDialog({ 
+  video, 
+  onClose, 
+  followedCreators = new Set(),
+  onFollowCreator,
+  currentUserId = 'user_account'
+}: VideoDetailsDialogProps) {
   if (!video) return null;
+
+  const creatorId = video.creatorId || video.creator.toLowerCase().replace(/\s+/g, '-');
+  const isFollowing = followedCreators.has(creatorId);
+  const isOwnVideo = creatorId === currentUserId;
 
   return (
     <AnimatePresence>
@@ -66,7 +79,7 @@ export function VideoDetailsDialog({ video, onClose }: VideoDetailsDialogProps) 
               <p className="text-sm text-muted-foreground">Creator</p>
               <div className="flex items-center gap-2 mt-1">
                 <div
-                  className="w-8 h-8 rounded-full"
+                  className="w-8 h-8 rounded-sm"
                   style={{ backgroundColor: video.creatorAvatar }}
                 />
                 <p>{video.creator}</p>
@@ -99,23 +112,51 @@ export function VideoDetailsDialog({ video, onClose }: VideoDetailsDialogProps) 
           </div>
 
           {/* Actions */}
-          <motion.div
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            <Button
-              variant="destructive"
-              className="w-full shadow-ios"
-              onClick={() => {
-                alert('Video reported. Thank you for helping keep Dorphin safe!');
-                onClose();
-              }}
+          <div className="space-y-3">
+            {!isOwnVideo && onFollowCreator && (
+              <motion.div
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              >
+                <Button
+                  variant={isFollowing ? "outline" : "default"}
+                  className="w-full shadow-ios"
+                  onClick={() => onFollowCreator(creatorId)}
+                >
+                  {isFollowing ? (
+                    <>
+                      <UserCheck className="w-4 h-4 mr-2" />
+                      Following
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Follow {video.creator}
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            )}
+            
+            <motion.div
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
-              <Flag className="w-4 h-4 mr-2" />
-              Report Video
-            </Button>
-          </motion.div>
+              <Button
+                variant="destructive"
+                className="w-full shadow-ios"
+                onClick={() => {
+                  alert('Video reported. Thank you for helping keep Dorphin safe!');
+                  onClose();
+                }}
+              >
+                <Flag className="w-4 h-4 mr-2" />
+                Report Video
+              </Button>
+            </motion.div>
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>

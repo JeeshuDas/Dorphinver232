@@ -58,7 +58,7 @@ export function VideoCard({ video, onVideoClick }: VideoCardProps) {
           <div className="flex items-center gap-2">
             {/* Creator Avatar */}
             <div 
-              className="w-7 h-7 rounded-full shrink-0 shadow-ios-sm"
+              className="w-7 h-7 rounded-sm shrink-0 shadow-ios-sm"
               style={{ backgroundColor: video.creatorAvatar }}
             />
             {/* Title */}

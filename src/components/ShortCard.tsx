@@ -34,7 +34,7 @@ export function ShortCard({ video, onClick }: ShortCardProps) {
         <div className="flex items-center gap-2">
           {/* Creator Avatar */}
           <div 
-            className="w-6 h-6 rounded-full shrink-0 shadow-ios-sm"
+            className="w-6 h-6 rounded-sm shrink-0 shadow-ios-sm"
             style={{ backgroundColor: video.creatorAvatar }}
           />
           {/* Title */}

@@ -2,24 +2,52 @@ import { useRef, useState, useEffect } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
 import { motion, AnimatePresence } from 'motion/react';
-import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User } from 'lucide-react';
+import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User, Check } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
+import { SmileyIcon } from './SmileyIcon';
+import { toast } from 'sonner@2.0.3';
+import { copyToClipboard } from '../utils/clipboard';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface HomeScreenProps {
   onVideoClick: (video: Video) => void;
   onShortClick: (categoryId: string, index: number) => void;
   onCreatorClick: (creatorId: string) => void;
   followedCreators: Set<string>;
+  onFollowCreator?: (creatorId: string) => void;
   onProfileClick?: () => void;
   onLeaderboardClick?: () => void;
   onSearchClick?: () => void;
   showShorts?: boolean;
   shortsLimit?: number;
+  currentUserId?: string;
+  reactedVideos?: Set<string>;
+  onReact?: (videoId: string) => void;
+  comments?: Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>;
+  onAddComment?: (videoId: string, text: string) => void;
+  userAvatar?: string;
 }
 
-export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followedCreators, onProfileClick, onLeaderboardClick, onSearchClick, showShorts = true, shortsLimit = 25 }: HomeScreenProps) {
+export function HomeScreen({ 
+  onVideoClick, 
+  onShortClick, 
+  onCreatorClick, 
+  followedCreators,
+  onFollowCreator, 
+  onProfileClick, 
+  onLeaderboardClick, 
+  onSearchClick, 
+  showShorts = true, 
+  shortsLimit = 25,
+  currentUserId = 'user_account',
+  reactedVideos = new Set(),
+  onReact,
+  comments = {},
+  onAddComment,
+  userAvatar = 'UP'
+}: HomeScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentlyPlayingId, setCurrentlyPlayingId] = useState<string | null>(null);
   
@@ -72,7 +100,7 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
         <div className="flex items-center gap-2">
           <motion.button
             onClick={onSearchClick}
-            className="w-10 h-10 rounded-full flex items-center justify-center shadow-ios"
+            className="w-10 h-10 rounded-lg flex items-center justify-center shadow-ios"
             style={{
               background: 'rgba(0, 0, 0, 0.2)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -85,7 +113,7 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
           </motion.button>
           <motion.button
             onClick={onLeaderboardClick}
-            className="w-10 h-10 rounded-full flex items-center justify-center shadow-ios"
+            className="w-10 h-10 rounded-lg flex items-center justify-center shadow-ios"
             style={{
               background: 'rgba(0, 0, 0, 0.2)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -98,11 +126,21 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
           </motion.button>
           <motion.button
             onClick={onProfileClick}
-            className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios"
+            className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios flex items-center justify-center overflow-hidden"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          />
+          >
+            {userAvatar && (userAvatar.startsWith('http://') || userAvatar.startsWith('https://') || userAvatar.startsWith('data:image/')) ? (
+              <ImageWithFallback
+                src={userAvatar}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-white text-sm">{userAvatar}</span>
+            )}
+          </motion.button>
         </div>
       </div>
 
@@ -163,6 +201,13 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
           containerRef={containerRef}
           currentlyPlayingId={currentlyPlayingId}
           setCurrentlyPlayingId={setCurrentlyPlayingId}
+          currentUserId={currentUserId}
+          hasReacted={reactedVideos.has(longVideos[0].id)}
+          onReact={onReact}
+          comments={comments[longVideos[0].id] || []}
+          onAddComment={onAddComment}
+          followedCreators={followedCreators}
+          onFollowCreator={onFollowCreator}
         />
       </div>
 
@@ -183,6 +228,13 @@ export function HomeScreen({ onVideoClick, onShortClick, onCreatorClick, followe
             containerRef={containerRef}
             currentlyPlayingId={currentlyPlayingId}
             setCurrentlyPlayingId={setCurrentlyPlayingId}
+            currentUserId={currentUserId}
+            hasReacted={reactedVideos.has(video.id)}
+            onReact={onReact}
+            comments={comments[video.id] || []}
+            onAddComment={onAddComment}
+            followedCreators={followedCreators}
+            onFollowCreator={onFollowCreator}
           />
         </div>
       ))}
@@ -196,7 +248,14 @@ function SquareVideoCard({
   index,
   containerRef,
   currentlyPlayingId,
-  setCurrentlyPlayingId
+  setCurrentlyPlayingId,
+  currentUserId = 'user_account',
+  hasReacted = false,
+  onReact,
+  comments = [],
+  onAddComment,
+  followedCreators,
+  onFollowCreator
 }: { 
   video: Video; 
   onVideoClick: (video: Video) => void; 
@@ -204,14 +263,32 @@ function SquareVideoCard({
   containerRef: React.RefObject<HTMLDivElement>;
   currentlyPlayingId: string | null;
   setCurrentlyPlayingId: (id: string | null) => void;
+  currentUserId?: string;
+  hasReacted?: boolean;
+  onReact?: (videoId: string) => void;
+  comments?: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
+  onAddComment?: (videoId: string, text: string) => void;
+  followedCreators?: Set<string>;
+  onFollowCreator?: (creatorId: string) => void;
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [showControls, setShowControls] = useState(false);
-  const [reacted, setReacted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<'details' | 'comments' | 'share' | null>(null);
+  const [justReacted, setJustReacted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const prevReactedRef = useRef(hasReacted);
+
+  // Track when reaction changes
+  useEffect(() => {
+    if (hasReacted && !prevReactedRef.current) {
+      setJustReacted(true);
+      const timer = setTimeout(() => setJustReacted(false), 1000);
+      return () => clearTimeout(timer);
+    }
+    prevReactedRef.current = hasReacted;
+  }, [hasReacted]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -346,23 +423,34 @@ function SquareVideoCard({
       {/* Overlays - Centered in video, above action bar */}
       <AnimatePresence>
         {activeOverlay === 'details' && (
-          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
-            <HomeDetailsOverlay video={video} formatNumber={formatNumber} />
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-[5]">
+            <HomeDetailsOverlay 
+              video={video} 
+              formatNumber={formatNumber}
+              followedCreators={followedCreators}
+              onFollowCreator={onFollowCreator}
+              currentUserId={currentUserId}
+            />
           </div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {activeOverlay === 'comments' && (
-          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
-            <HomeCommentsOverlay video={video} formatNumber={formatNumber} />
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-[5]">
+            <HomeCommentsOverlay 
+              video={video} 
+              formatNumber={formatNumber}
+              comments={comments}
+              onAddComment={onAddComment}
+            />
           </div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {activeOverlay === 'share' && (
-          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-20">
+          <div className="absolute inset-x-0 top-0 bottom-20 flex items-center justify-center pointer-events-auto z-[5]">
             <HomeShareOverlay video={video} />
           </div>
         )}
@@ -393,10 +481,16 @@ function SquareVideoCard({
             transition={{ type: "spring", stiffness: 260, damping: 28, mass: 0.8 }}
             onClick={(e) => {
               e.stopPropagation();
-              setReacted(!reacted);
+              if (onReact) {
+                onReact(video.id);
+              }
             }}
           >
-            <Smile className={`w-6 h-6 ${reacted ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+            {hasReacted ? (
+              <SmileyIcon className="w-6 h-6" color="#EAB308" animated={justReacted} />
+            ) : (
+              <Smile className="w-6 h-6" />
+            )}
           </motion.button>
           <motion.button
             className="text-white/90 hover:text-white transition-colors"
@@ -541,7 +635,23 @@ function ShortCard({ video, index, onVideoClick }: { video: Video; index: number
 }
 
 // Overlay Components for HomeScreen
-function HomeDetailsOverlay({ video, formatNumber }: { video: Video; formatNumber: (num: number) => string }) {
+function HomeDetailsOverlay({ 
+  video, 
+  formatNumber,
+  followedCreators,
+  onFollowCreator,
+  currentUserId
+}: { 
+  video: Video; 
+  formatNumber: (num: number) => string;
+  followedCreators?: Set<string>;
+  onFollowCreator?: (creatorId: string) => void;
+  currentUserId?: string;
+}) {
+  const creatorId = video.creatorId || video.creator.toLowerCase().replace(/\s+/g, '-');
+  const isFollowing = followedCreators?.has(creatorId) || false;
+  const isOwnVideo = creatorId === currentUserId;
+
   return (
     <motion.div
       className="w-[85%] max-w-[420px]"
@@ -563,10 +673,23 @@ function HomeDetailsOverlay({ video, formatNumber }: { video: Video; formatNumbe
         {/* Creator Info */}
         <div className="flex flex-col items-center text-center mb-4">
           <div 
-            className="w-14 h-14 rounded-full mb-2 shadow-ios"
+            className="w-14 h-14 rounded-lg mb-2 shadow-ios"
             style={{ backgroundColor: video.creatorAvatar }}
           />
           <p className="text-white text-sm">{video.creator}</p>
+          {!isOwnVideo && onFollowCreator && (
+            <Button
+              size="sm"
+              variant={isFollowing ? "secondary" : "default"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onFollowCreator(creatorId);
+              }}
+              className="mt-2 w-full"
+            >
+              {isFollowing ? 'Following' : 'Follow'}
+            </Button>
+          )}
         </div>
 
         {/* Video Title */}
@@ -601,13 +724,33 @@ function HomeDetailsOverlay({ video, formatNumber }: { video: Video; formatNumbe
   );
 }
 
-function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumber: (num: number) => string }) {
+function HomeCommentsOverlay({ 
+  video, 
+  formatNumber,
+  comments,
+  onAddComment 
+}: { 
+  video: Video; 
+  formatNumber: (num: number) => string;
+  comments: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
+  onAddComment?: (videoId: string, text: string) => void;
+}) {
   const [newComment, setNewComment] = useState('');
   
   const mockComments = [
-    { id: 1, user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', likes: 42, time: '2h' },
-    { id: 2, user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', likes: 28, time: '5h' },
+    { id: '1', user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', time: '2h' },
+    { id: '2', user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', time: '5h' },
   ];
+
+  const displayComments = comments.length > 0 ? comments : mockComments;
+
+  const handlePostComment = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (newComment.trim() && onAddComment) {
+      onAddComment(video.id, newComment.trim());
+      setNewComment('');
+    }
+  };
 
   return (
     <motion.div
@@ -627,14 +770,14 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
           border: '1px solid rgba(255, 255, 255, 0.15)',
         }}
       >
-        <h3 className="text-white mb-4 text-center flex items-center justify-center gap-2">
+        <h3 className="text-white mb-4 text-center flex items-center justify-center gap-2 text-sm">
           <MessageCircle className="w-5 h-5" />
-          Comments
+          Comments ({displayComments.length})
         </h3>
 
         {/* Comments List */}
         <div className="space-y-2 mb-3 overflow-y-auto flex-1 scrollbar-hide">
-          {mockComments.map((comment) => (
+          {displayComments.map((comment) => (
             <div key={comment.id} className="flex gap-2">
               <div 
                 className="w-7 h-7 rounded-full shrink-0"
@@ -645,7 +788,7 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
                   <p className="text-white text-xs truncate">{comment.user}</p>
                   <span className="text-white/40 text-[10px]">{comment.time}</span>
                 </div>
-                <p className="text-white/70 text-xs">{comment.text}</p>
+                <p className="text-white/70 text-xs leading-relaxed">{comment.text}</p>
               </div>
             </div>
           ))}
@@ -654,18 +797,22 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
         {/* Add Comment */}
         <div className="flex gap-2 pt-2 border-t border-white/10">
           <Textarea
-            placeholder="Comment..."
+            placeholder="Add a comment..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            className="flex-1 min-h-[35px] max-h-[45px] bg-white/5 border-white/10 text-white text-xs placeholder:text-white/40"
+            className="flex-1 min-h-[35px] max-h-[45px] bg-white/5 border-white/10 text-white text-xs placeholder:text-white/40 resize-none"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handlePostComment(e as any);
+              }
+            }}
           />
           <Button 
             size="sm" 
-            onClick={(e) => {
-              e.stopPropagation();
-              setNewComment('');
-            }}
+            onClick={handlePostComment}
+            disabled={!newComment.trim()}
             className="shrink-0 h-[35px] self-end"
           >
             Post
@@ -677,8 +824,65 @@ function HomeCommentsOverlay({ video, formatNumber }: { video: Video; formatNumb
 }
 
 function HomeShareOverlay({ video }: { video: Video }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async (platform: string) => {
+    const videoUrl = `${window.location.origin}/?video=${video.id}`;
+    const text = `Check out "${video.title}" by ${video.creator}`;
+    
+    switch (platform) {
+      case 'copy':
+        {
+          const copySuccess = await copyToClipboard(videoUrl);
+          if (copySuccess) {
+            setCopied(true);
+            toast.success('Link copied to clipboard!');
+            setTimeout(() => setCopied(false), 2000);
+          } else {
+            toast.error('Failed to copy link');
+          }
+        }
+        break;
+      case 'whatsapp':
+        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + videoUrl)}`, '_blank');
+        toast.success('Opening WhatsApp...');
+        break;
+      case 'twitter':
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(videoUrl)}`, '_blank');
+        toast.success('Opening Twitter...');
+        break;
+      case 'facebook':
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(videoUrl)}`, '_blank');
+        toast.success('Opening Facebook...');
+        break;
+      case 'instagram':
+        {
+          const igSuccess = await copyToClipboard(videoUrl);
+          if (igSuccess) {
+            toast.info('Link copied! Share it on Instagram');
+          } else {
+            toast.error('Failed to copy link');
+          }
+        }
+        break;
+      case 'download':
+        if (video.videoUrl) {
+          try {
+            const a = document.createElement('a');
+            a.href = video.videoUrl;
+            a.download = `${video.title}.mp4`;
+            a.click();
+            toast.success('Download started!');
+          } catch (err) {
+            toast.error('Download not available');
+          }
+        }
+        break;
+    }
+  };
+
   const shareOptions = [
-    { id: 'copy', icon: Link, color: '#3B82F6', label: 'Copy Link' },
+    { id: 'copy', icon: copied ? Check : Link, color: copied ? '#10B981' : '#3B82F6', label: 'Copy Link' },
     { id: 'whatsapp', icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
     { id: 'twitter', icon: Twitter, color: '#1DA1F2', label: 'Twitter' },
     { id: 'facebook', icon: Facebook, color: '#4267B2', label: 'Facebook' },
@@ -727,7 +931,7 @@ function HomeShareOverlay({ video }: { video: Video }) {
               transition={{ type: "spring", stiffness: 260, damping: 28, mass: 0.8 }}
               onClick={(e) => {
                 e.stopPropagation();
-                // Handle share action
+                handleShare(option.id);
               }}
             >
               <div 
