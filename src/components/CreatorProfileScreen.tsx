@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Video } from '../types';
 import { VideoCard } from './VideoCard';
-import { ArrowLeft, Settings } from 'lucide-react';
+import { ArrowLeft, Settings, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CreatorProfileScreenProps {
   creatorId: string;
@@ -194,12 +195,22 @@ const mockVideos: Video[] = [
 ];
 
 export function CreatorProfileScreen({ creatorId, onBack, onVideoClick, followedCreators, onFollowCreator }: CreatorProfileScreenProps) {
+  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<'longs' | 'shorts'>('longs');
-  const creator = mockCreatorData[creatorId as keyof typeof mockCreatorData] || mockCreatorData['creator-1'];
+  const [creator, setCreator] = useState(mockCreatorData[creatorId as keyof typeof mockCreatorData] || mockCreatorData['creator-1']);
+  const [videos, setVideos] = useState<Video[]>(mockVideos);
+  const [isLoading, setIsLoading] = useState(false);
   const isFollowing = followedCreators.has(creatorId);
 
+  // Use mock data - no backend calls
+  useEffect(() => {
+    // Filter videos by this creator from mock data
+    const creatorVideos = mockVideos.filter(v => v.creatorId === creatorId);
+    setVideos(creatorVideos);
+  }, [creatorId]);
+
   // Filter videos based on active tab
-  const filteredVideos = mockVideos.filter(video => 
+  const filteredVideos = videos.filter(video => 
     activeTab === 'longs' ? video.category === 'long' : video.category === 'short'
   );
 
@@ -223,6 +234,7 @@ export function CreatorProfileScreen({ creatorId, onBack, onVideoClick, followed
           <ArrowLeft className="w-5 h-5" />
         </motion.button>
         <h2 className="flex-1">{creator.name}</h2>
+        {isLoading && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
       </div>
 
       {/* Profile Header */}

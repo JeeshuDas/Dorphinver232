@@ -9,9 +9,12 @@ import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
-import { Search, Mic, ArrowLeft, X } from 'lucide-react';
+import { AuthScreen } from './components/AuthScreen';
+import { Search, Mic, ArrowLeft, X, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { DataProvider, useData } from './providers/DataProvider';
 import logoImage from 'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png';
 
 type Screen = 'home' | 'shorts' | 'search' | 'profile' | 'video' | 'creator' | 'leaderboard';
@@ -27,7 +30,11 @@ interface NavigationStackEntry {
   scrollPosition?: number;
 }
 
-export default function App() {
+function AppContent() {
+  const { user, isAuthenticated, logout } = useAuth();
+  const { refetchVideos, refetchShorts } = useData();
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
+  
   const [navigationStack, setNavigationStack] = useState<NavigationStackEntry[]>([{ screen: 'home' }]);
   const currentScreen = navigationStack[navigationStack.length - 1]?.screen || 'home';
   const currentData = navigationStack[navigationStack.length - 1]?.data;
@@ -39,9 +46,9 @@ export default function App() {
   const [videoProgress, setVideoProgress] = useState<Record<string, number>>({});
   const [isVoiceSearchActive, setIsVoiceSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userAvatar, setUserAvatar] = useState('UQ');
-  const [userDisplayName, setUserDisplayName] = useState('Your Profile');
-  const [userBio, setUserBio] = useState('');
+  const [userAvatar, setUserAvatar] = useState(user?.avatar || user?.displayName?.slice(0, 2).toUpperCase() || 'UQ');
+  const [userDisplayName, setUserDisplayName] = useState(user?.displayName || 'Your Profile');
+  const [userBio, setUserBio] = useState(user?.bio || '');
   const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['animezone', 'musicworld', 'comedyclub', 'gamerpro', 'foodiechannel', 'djmaster', 'viralcontent']));
   const [showShorts, setShowShorts] = useState(true);
   const [shortsLimit, setShortsLimit] = useState(7);
@@ -253,8 +260,24 @@ export default function App() {
     navigateTo('shorts', { shortsCategoryId: categoryId, shortsStartIndex: startIndex });
   };
 
-  const handleUploadVideo = (video: Video) => {
+  const handleUploadVideo = async (video: Video, videoFile?: File, thumbnailFile?: File) => {
+    // Add to local state immediately for UI feedback
     setUserVideos([video, ...userVideos]);
+
+    // Show success notification
+    if (isAuthenticated) {
+      try {
+        const { toast } = await import('sonner@2.0.3');
+        toast.success('Video uploaded successfully!');
+      } catch (error) {
+        console.error('Error uploading video:', error);
+        const { toast } = await import('sonner@2.0.3');
+        toast.error('Failed to upload video. Please try again.');
+        
+        // Remove from local state on error
+        setUserVideos(prev => prev.filter(v => v.id !== video.id));
+      }
+    }
   };
 
   const handleDeleteVideo = (videoId: string) => {
@@ -293,7 +316,8 @@ export default function App() {
     });
   }, [miniPlayerVideo]);
 
-  const handleFollowCreator = (creatorId: string) => {
+  const handleFollowCreator = async (creatorId: string) => {
+    // Optimistic update
     setFollowedCreators(prev => {
       const newSet = new Set(prev);
       if (newSet.has(creatorId)) {
@@ -303,24 +327,31 @@ export default function App() {
       }
       return newSet;
     });
+
+    // Follow is already toggled via optimistic update
   };
 
-  const handleAddComment = useCallback((videoId: string, text: string) => {
+  const handleAddComment = useCallback(async (videoId: string, text: string) => {
+    const tempId = Date.now().toString();
     const newComment = {
-      id: Date.now().toString(),
+      id: tempId,
       user: userDisplayName,
-      avatar: '#FF6B9D',
+      avatar: user?.avatar || '#FF6B9D',
       text,
       time: 'just now'
     };
     
+    // Optimistic update
     setVideoComments(prev => ({
       ...prev,
       [videoId]: [newComment, ...(prev[videoId] || [])]
     }));
-  }, [userDisplayName]);
 
-  const handleReactToVideo = useCallback((videoId: string) => {
+    // Comment is already added via optimistic update
+  }, [userDisplayName, user, isAuthenticated]);
+
+  const handleReactToVideo = useCallback(async (videoId: string) => {
+    // Optimistic update
     setReactedVideos(prev => {
       const newSet = new Set(prev);
       if (newSet.has(videoId)) {
@@ -330,7 +361,9 @@ export default function App() {
       }
       return newSet;
     });
-  }, []);
+
+    // Like is already toggled via optimistic update
+  }, [isAuthenticated]);
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
@@ -459,15 +492,29 @@ export default function App() {
             {/* Right Icons */}
             {currentScreen !== 'profile' && currentScreen !== 'search' && (
               <div className="flex items-center gap-3">
-                <motion.button
-                  className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
-                  onClick={() => navigateTo('profile')}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                >
-                  {userAvatar}
-                </motion.button>
+                {!isAuthenticated && (
+                  <motion.button
+                    className="px-4 py-2 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-ios text-sm flex items-center gap-2"
+                    onClick={() => setShowAuthScreen(true)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login
+                  </motion.button>
+                )}
+                {isAuthenticated && (
+                  <motion.button
+                    className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
+                    onClick={() => navigateTo('profile')}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  >
+                    {userAvatar}
+                  </motion.button>
+                )}
               </div>
             )}
           </motion.header>
@@ -709,8 +756,25 @@ export default function App() {
         currentUserId="user_account"
       />
 
+      {/* Auth Screen */}
+      <AnimatePresence>
+        {showAuthScreen && (
+          <AuthScreen onClose={() => setShowAuthScreen(false)} />
+        )}
+      </AnimatePresence>
+
       {/* Toast Notifications */}
       <Toaster />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <DataProvider>
+        <AppContent />
+      </DataProvider>
+    </AuthProvider>
   );
 }

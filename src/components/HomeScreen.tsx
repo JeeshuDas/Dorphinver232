@@ -2,6 +2,8 @@ import { useRef, useState, useEffect } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
 import { motion, AnimatePresence } from 'motion/react';
+import { useData } from '../providers/DataProvider';
+import { useAuth } from '../contexts/AuthContext';
 import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User, Check } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
@@ -82,15 +84,21 @@ export function HomeScreen({
     setIsDragging(false);
   };
   
+  // Get data from API or fallback to mock
+  const { isAuthenticated } = useAuth();
+  const { videos: apiVideos, shorts: apiShorts, isLoading } = useData();
+  
   // Get all long videos and shorts
-  // Combine user videos (newest first) with mock videos
+  // Use API data if authenticated, otherwise use mock data
   const userLongVideos = userVideos.filter(v => v.category === 'long');
   const mockLongVideos = mockVideos.filter(v => v.category === 'long');
-  const longVideos = [...userLongVideos, ...mockLongVideos];
+  const apiLongVideos = isAuthenticated && apiVideos.length > 0 ? apiVideos : [];
+  const longVideos = apiLongVideos.length > 0 ? [...userLongVideos, ...apiLongVideos] : [...userLongVideos, ...mockLongVideos];
   
   const userShortsVideos = userVideos.filter(v => v.category === 'short');
   const mockShortsVideos = mockVideos.filter(v => v.category === 'short');
-  const shortsVideos = [...userShortsVideos, ...mockShortsVideos].slice(0, shortsLimit);
+  const apiShortsVideos = isAuthenticated && apiShorts.length > 0 ? apiShorts : [];
+  const shortsVideos = (apiShortsVideos.length > 0 ? [...userShortsVideos, ...apiShortsVideos] : [...userShortsVideos, ...mockShortsVideos]).slice(0, shortsLimit);
 
   // Get unique creators from videos
   const allCreators = Array.from(new Map(

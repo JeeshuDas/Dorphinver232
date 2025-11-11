@@ -462,8 +462,8 @@ export function ProfileScreen({
       <UploadVideoDialog
         open={showUploadDialog}
         onClose={() => setShowUploadDialog(false)}
-        onUpload={(video) => {
-          onUpload(video);
+        onUpload={(video, videoFile, thumbnailFile) => {
+          onUpload(video, videoFile, thumbnailFile);
           setShowUploadDialog(false);
         }}
       />

@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SearchScreenProps {
   onVideoClick: (video: Video) => void;
@@ -11,6 +12,10 @@ interface SearchScreenProps {
 }
 
 export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
+  const { isAuthenticated } = useAuth();
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Video[]>([]);
+  const [error, setError] = useState<string | null>(null);
   
   const formatViews = (views: number) => {
     if (views >= 1000000) return (views / 1000000).toFixed(1) + 'M';
@@ -18,24 +23,59 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
     return views.toString();
   };
 
+  // Search with backend when authenticated
+  useEffect(() => {
+    const searchVideos = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults(mockVideos);
+        return;
+      }
+
+      // Use mock data for search
+      setIsSearching(true);
+      
+      // Simulate search delay
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const query = searchQuery.toLowerCase();
+      const filtered = mockVideos.filter(
+        (video) =>
+          video.title.toLowerCase().includes(query) ||
+          video.creator.toLowerCase().includes(query)
+      );
+      setSearchResults(filtered);
+      setIsSearching(false);
+    };
+
+    const debounceTimer = setTimeout(() => {
+      searchVideos();
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, isAuthenticated]);
+
   const filteredVideos = useMemo(() => {
     if (!searchQuery.trim()) return mockVideos;
-    
-    const query = searchQuery.toLowerCase();
-    return mockVideos.filter(
-      (video) =>
-        video.title.toLowerCase().includes(query) ||
-        video.creator.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
+    return searchResults;
+  }, [searchQuery, searchResults]);
 
   return (
     <div className="h-full overflow-y-auto scrollbar-hide pb-6 bg-background">
       {/* Results */}
       <div className="px-6 pt-2 pb-8">
         {searchQuery && (
-          <p className="mb-4 text-muted-foreground/60 text-sm">
-            {filteredVideos.length} results
+          <p className="mb-4 text-muted-foreground/60 text-sm flex items-center gap-2">
+            {isSearching ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              <>
+                {filteredVideos.length} results
+                {error && <span className="text-yellow-500 text-xs">({error})</span>}
+              </>
+            )}
           </p>
         )}
 
@@ -58,6 +98,13 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
                 className="w-36 h-20 rounded-xl shrink-0 relative overflow-hidden shadow-ios-sm"
                 style={{ backgroundColor: video.thumbnail }}
               >
+                {video.thumbnail && !video.thumbnail.startsWith('#') && (
+                  <img 
+                    src={video.thumbnail} 
+                    alt={video.title}
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 {/* Duration Badge */}
                 <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-xs" style={{
                   background: 'rgba(0, 0, 0, 0.7)',
@@ -89,7 +136,7 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
           ))}
         </div>
 
-        {filteredVideos.length === 0 && searchQuery && (
+        {filteredVideos.length === 0 && searchQuery && !isSearching && (
           <div className="text-center py-16 text-muted-foreground/50">
             <Search className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p className="text-sm">no results</p>

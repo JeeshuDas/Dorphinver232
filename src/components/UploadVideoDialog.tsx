@@ -13,7 +13,7 @@ import { Progress } from './ui/progress';
 interface UploadVideoDialogProps {
   open: boolean;
   onClose: () => void;
-  onUpload: (video: Video) => void;
+  onUpload: (video: Video, videoFile?: File, thumbnailFile?: File) => void;
 }
 
 // Butter smooth spring config
@@ -67,50 +67,48 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
     }
   };
 
-  const handleUploadSubmit = () => {
+  const handleUploadSubmit = async () => {
+    if (!videoFile || !title.trim()) return;
+    
     setStep('uploading');
     
     // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setUploadProgress(100);
-        
-        // After a brief delay, create the video
-        setTimeout(() => {
-          const newVideo: Video = {
-            id: `user-video-${Date.now()}`,
-            title: title || 'Untitled Video',
-            creator: 'You',
-            creatorId: 'user-profile',
-            creatorAvatar: '#8B5CF6',
-            thumbnail: thumbnailPreview || generateRandomColor(),
-            videoUrl: videoFile ? URL.createObjectURL(videoFile) : undefined,
-            duration: Math.floor(Math.random() * 300) + 60,
-            uploadDate: new Date().toISOString(),
-            category: videoType,
-            views: 0,
-            likes: 0,
-            comments: 0,
-            description: description || undefined,
-            shortCategory: videoType === 'short' ? shortCategory : undefined,
-          };
-          
-          onUpload(newVideo);
-          setStep('success');
-          
-          // Auto close after success
-          setTimeout(() => {
-            handleClose();
-          }, 2000);
-        }, 500);
-      } else {
-        setUploadProgress(progress);
-      }
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => Math.min(prev + Math.random() * 15, 95));
     }, 200);
+
+    // Simulate upload delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    clearInterval(progressInterval);
+    setUploadProgress(100);
+    
+    // Create mock video object
+    const newVideo: Video = {
+      id: `mock-${Date.now()}`,
+      title: title.trim(),
+      creator: 'Demo User',
+      creatorId: 'mock-user-1',
+      creatorAvatar: '#8B5CF6',
+      thumbnail: thumbnailPreview || generateRandomColor(),
+      videoUrl: URL.createObjectURL(videoFile),
+      duration: 120, // Default duration
+      uploadDate: new Date().toISOString().split('T')[0],
+      category: videoType,
+      views: 0,
+      likes: 0,
+      comments: 0,
+      description: description.trim(),
+      shortCategory: videoType === 'short' ? shortCategory : undefined,
+    };
+    
+    onUpload(newVideo, videoFile, thumbnailFile);
+    setStep('success');
+    
+    // Auto close after success
+    setTimeout(() => {
+      handleClose();
+    }, 2000);
   };
 
   const handleClose = () => {
