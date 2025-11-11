@@ -4,7 +4,7 @@ import { mockVideos } from '../data/mockData';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '../providers/DataProvider';
 import { useAuth } from '../contexts/AuthContext';
-import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User, Check } from 'lucide-react';
+import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User, Check, LogIn } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -22,6 +22,7 @@ interface HomeScreenProps {
   onProfileClick?: () => void;
   onLeaderboardClick?: () => void;
   onSearchClick?: () => void;
+  onShowAuthScreen?: () => void;
   showShorts?: boolean;
   shortsLimit?: number;
   currentUserId?: string;
@@ -42,6 +43,7 @@ export function HomeScreen({
   onProfileClick, 
   onLeaderboardClick, 
   onSearchClick, 
+  onShowAuthScreen,
   showShorts = true, 
   shortsLimit = 25,
   currentUserId = 'user_account',
@@ -140,23 +142,36 @@ export function HomeScreen({
           >
             <Trophy className="w-4.5 h-4.5 text-muted-foreground" />
           </motion.button>
-          <motion.button
-            onClick={onProfileClick}
-            className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios flex items-center justify-center overflow-hidden"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            {userAvatar && (userAvatar.startsWith('http://') || userAvatar.startsWith('https://') || userAvatar.startsWith('data:image/')) ? (
-              <ImageWithFallback
-                src={userAvatar}
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-white text-sm">{userAvatar}</span>
-            )}
-          </motion.button>
+          {!isAuthenticated ? (
+            <motion.button
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-ios flex items-center gap-2"
+              onClick={onShowAuthScreen}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <LogIn className="w-4 h-4" />
+              <span className="text-sm">Login</span>
+            </motion.button>
+          ) : (
+            <motion.button
+              onClick={onProfileClick}
+              className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios flex items-center justify-center overflow-hidden"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              {userAvatar && (userAvatar.startsWith('http://') || userAvatar.startsWith('https://') || userAvatar.startsWith('data:image/')) ? (
+                <ImageWithFallback
+                  src={userAvatar}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-white text-sm">{userAvatar}</span>
+              )}
+            </motion.button>
+          )}
         </div>
       </div>
 

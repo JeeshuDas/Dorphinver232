@@ -13,7 +13,7 @@ import { Progress } from './ui/progress';
 interface UploadVideoDialogProps {
   open: boolean;
   onClose: () => void;
-  onUpload: (video: Video, videoFile?: File, thumbnailFile?: File) => void;
+  onUpload: (video: Video, videoFile?: File, thumbnailFile?: File) => Promise<void>;
 }
 
 // Butter smooth spring config
@@ -67,32 +67,21 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
     }
   };
 
-  const handleUploadSubmit = async () => {
+  const handleUpload = async () => {
     if (!videoFile || !title.trim()) return;
     
+    // Move to uploading step
     setStep('uploading');
+    setUploadProgress(10);
     
-    // Simulate upload progress
-    const progressInterval = setInterval(() => {
-      setUploadProgress(prev => Math.min(prev + Math.random() * 15, 95));
-    }, 200);
-
-    // Simulate upload delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    clearInterval(progressInterval);
-    setUploadProgress(100);
-    
-    // Create mock video object
     const newVideo: Video = {
-      id: `mock-${Date.now()}`,
+      id: Date.now().toString(),
       title: title.trim(),
-      creator: 'Demo User',
-      creatorId: 'mock-user-1',
-      creatorAvatar: '#8B5CF6',
-      thumbnail: thumbnailPreview || generateRandomColor(),
-      videoUrl: URL.createObjectURL(videoFile),
-      duration: 120, // Default duration
+      creator: 'You',
+      creatorAvatar: generateRandomColor(),
+      thumbnail: thumbnailPreview || '',
+      videoUrl: videoFile ? URL.createObjectURL(videoFile) : '',
+      duration: 0, // Will be calculated by video player
       uploadDate: new Date().toISOString().split('T')[0],
       category: videoType,
       views: 0,
@@ -102,13 +91,35 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
       shortCategory: videoType === 'short' ? shortCategory : undefined,
     };
     
-    onUpload(newVideo, videoFile, thumbnailFile);
-    setStep('success');
+    // Simulate upload progress
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressInterval);
+          return 90;
+        }
+        return prev + 10;
+      });
+    }, 500);
     
-    // Auto close after success
-    setTimeout(() => {
-      handleClose();
-    }, 2000);
+    try {
+      // Call the upload handler (which calls the backend)
+      await onUpload(newVideo, videoFile, thumbnailFile);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      setStep('success');
+      
+      // Auto close after success
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
+    } catch (error) {
+      clearInterval(progressInterval);
+      setUploadProgress(0);
+      setStep('details');
+      // Error will be shown by toast in parent component
+    }
   };
 
   const handleClose = () => {
@@ -390,7 +401,7 @@ export function UploadVideoDialog({ open, onClose, onUpload }: UploadVideoDialog
                         Back
                       </Button>
                       <Button
-                        onClick={handleUploadSubmit}
+                        onClick={handleUpload}
                         disabled={!title.trim()}
                         className="flex-1"
                       >

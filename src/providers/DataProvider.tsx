@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
+import { videoApi, userApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DataContextType {
   videos: Video[];
@@ -30,49 +32,109 @@ interface DataProviderProps {
 }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
+  const { isAuthenticated } = useAuth();
   const [videos, setVideos] = useState<Video[]>(mockVideos.filter(v => v.category === 'long'));
   const [shorts, setShorts] = useState<Video[]>(mockVideos.filter(v => v.category === 'short'));
-  const [isLoading] = useState(false);
-  const [error] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [followedUsers, setFollowedUsers] = useState<Set<string>>(new Set());
 
-  // Mock fetch videos
+  // Fetch videos from backend
   const fetchVideos = async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setVideos(mockVideos.filter(v => v.category === 'long'));
-  };
-
-  // Mock fetch shorts
-  const fetchShorts = async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setShorts(mockVideos.filter(v => v.category === 'short'));
-  };
-
-  // Mock like a video
-  const likeVideo = async (videoId: string) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    setVideos(prev => prev.map(v => 
-      v.id === videoId ? { ...v, likes: v.likes + 1 } : v
-    ));
-    setShorts(prev => prev.map(v => 
-      v.id === videoId ? { ...v, likes: v.likes + 1 } : v
-    ));
-  };
-
-  // Mock follow a user
-  const followUser = async (userId: string) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    setFollowedUsers(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(userId)) {
-        newSet.delete(userId);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await videoApi.getFeed('long', 50, 0);
+      if (data.videos && data.videos.length > 0) {
+        setVideos(data.videos);
       } else {
-        newSet.add(userId);
+        // Fallback to mock data if no backend videos
+        setVideos(mockVideos.filter(v => v.category === 'long'));
       }
-      return newSet;
-    });
+    } catch (err: any) {
+      console.error('Error fetching videos:', err);
+      setError(err.message);
+      // Fallback to mock data on error
+      setVideos(mockVideos.filter(v => v.category === 'long'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch shorts from backend
+  const fetchShorts = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await videoApi.getFeed('short', 50, 0);
+      if (data.videos && data.videos.length > 0) {
+        setShorts(data.videos);
+      } else {
+        // Fallback to mock data if no backend shorts
+        setShorts(mockVideos.filter(v => v.category === 'short'));
+      }
+    } catch (err: any) {
+      console.error('Error fetching shorts:', err);
+      setError(err.message);
+      // Fallback to mock data on error
+      setShorts(mockVideos.filter(v => v.category === 'short'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchVideos();
+    fetchShorts();
+  }, []);
+
+  // Like a video
+  const likeVideo = async (videoId: string) => {
+    if (!isAuthenticated) {
+      console.warn('Must be authenticated to like videos');
+      return;
+    }
+
+    try {
+      const result = await videoApi.likeVideo(videoId);
+      
+      // Update local state optimistically
+      setVideos(prev => prev.map(v => 
+        v.id === videoId ? { ...v, likes: result.likes } : v
+      ));
+      setShorts(prev => prev.map(v => 
+        v.id === videoId ? { ...v, likes: result.likes } : v
+      ));
+    } catch (err: any) {
+      console.error('Error liking video:', err);
+      setError(err.message);
+    }
+  };
+
+  // Follow a user
+  const followUser = async (userId: string) => {
+    if (!isAuthenticated) {
+      console.warn('Must be authenticated to follow users');
+      return;
+    }
+
+    try {
+      await userApi.followUser(userId);
+      
+      setFollowedUsers(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(userId)) {
+          newSet.delete(userId);
+        } else {
+          newSet.add(userId);
+        }
+        return newSet;
+      });
+    } catch (err: any) {
+      console.error('Error following user:', err);
+      setError(err.message);
+    }
   };
 
   // Check if following a user

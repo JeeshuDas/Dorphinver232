@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Video } from '../types';
-import { Settings, User, Upload as UploadIcon, Edit2, Check, X, Trash2, Camera, Link as LinkIcon } from 'lucide-react';
+import { Settings, User, Upload as UploadIcon, Edit2, Check, X, Trash2, Camera, Link as LinkIcon, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { userProfile } from '../data/mockData';
 import { Switch } from './ui/switch';
@@ -11,6 +11,8 @@ import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { UploadVideoDialog } from './UploadVideoDialog';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface ProfileScreenProps {
   userVideos: Video[];
@@ -49,6 +51,7 @@ export function ProfileScreen({
   shortsLimit = 25,
   onShortsLimitChange
 }: ProfileScreenProps) {
+  const { isAuthenticated, logout } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<'longs' | 'shorts'>('longs');
@@ -128,6 +131,18 @@ export function ProfileScreen({
 
   const isImageUrl = (str: string) => {
     return str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:image/');
+  };
+
+  const handleLogout = async () => {
+    if (logout) {
+      try {
+        await logout();
+        toast.success('Logged out successfully!');
+      } catch (error) {
+        console.error('Logout error:', error);
+        toast.error('Logout failed. Please try again.');
+      }
+    }
   };
 
   return (
@@ -452,6 +467,20 @@ export function ProfileScreen({
                     More settings coming soon
                   </p>
                 </div>
+
+                {/* Logout Button */}
+                {isAuthenticated && (
+                  <div className="pt-2">
+                    <Button
+                      variant="destructive"
+                      className="w-full shadow-ios"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Logout
+                    </Button>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>

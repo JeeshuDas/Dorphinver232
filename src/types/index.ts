@@ -2,37 +2,30 @@ export interface Video {
   id: string;
   title: string;
   creator: string;
+  creatorId: string;
   creatorAvatar: string;
   thumbnail: string;
-  videoUrl?: string;
-  duration: number;
-  progress?: number;
+  views: string;
   uploadDate: string;
   category: 'short' | 'long';
-  views: number;
+  videoUrl?: string;
+  duration?: number;
+  shortCategory?: string;
+  description?: string;
   likes?: number;
   comments?: number;
-  shortCategory?: 'comedy' | 'music' | 'dance' | 'educational' | 'lifestyle';
-  description?: string;
-  creatorId?: string;
 }
 
-export interface Category {
+export interface User {
   id: string;
-  name: string;
-  videos: Video[];
-}
-
-export interface ShortsCategory {
-  id: string;
-  name: string;
-  shorts: Video[];
-}
-
-export interface UserProfile {
+  email: string;
   username: string;
   displayName: string;
   avatar: string;
-  followers: number;
-  following: number;
+  bio?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  followers?: number;
+  following?: number;
+  isVerified?: boolean;
 }

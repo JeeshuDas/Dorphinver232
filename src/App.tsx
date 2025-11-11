@@ -1,3 +1,5 @@
+import { uploadVideoToStorage } from './services/videoUpload';
+import { videoApi, userApi, commentApi } from './services/api';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Video } from './types';
 import { HomeScreen } from './components/HomeScreen';
@@ -10,7 +12,7 @@ import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
 import { AuthScreen } from './components/AuthScreen';
-import { Search, Mic, ArrowLeft, X, LogIn } from 'lucide-react';
+import { Search, Mic, ArrowLeft, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -31,10 +33,10 @@ interface NavigationStackEntry {
 }
 
 function AppContent() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const { refetchVideos, refetchShorts } = useData();
-  const [showAuthScreen, setShowAuthScreen] = useState(false);
   
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
   const [navigationStack, setNavigationStack] = useState<NavigationStackEntry[]>([{ screen: 'home' }]);
   const currentScreen = navigationStack[navigationStack.length - 1]?.screen || 'home';
   const currentData = navigationStack[navigationStack.length - 1]?.data;
@@ -56,6 +58,33 @@ function AppContent() {
   const [reactedVideos, setReactedVideos] = useState<Set<string>>(new Set());
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout>();
   const screenContainerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Update user data when authentication state changes
+  useEffect(() => {
+    if (user) {
+      setUserAvatar(user.avatar || user.displayName?.slice(0, 2).toUpperCase() || 'U');
+      setUserDisplayName(user.displayName || user.username || 'User');
+      setUserBio(user.bio || '');
+      
+      // Fetch user's videos from backend
+      const fetchUserVideos = async () => {
+        try {
+          console.log('🎬 Fetching user videos from backend...', user.id);
+          const videos = await userApi.getUserVideos(user.id);
+          console.log('✅ User videos loaded:', videos.length);
+          setUserVideos(videos || []);
+        } catch (error) {
+          console.error('❌ Error fetching user videos:', error);
+          setUserVideos([]);
+        }
+      };
+      
+      fetchUserVideos();
+    } else {
+      // Clear user videos when logged out
+      setUserVideos([]);
+    }
+  }, [user]);
 
   // Save current scroll position before navigating
   const saveScrollPosition = useCallback(() => {
@@ -260,22 +289,44 @@ function AppContent() {
     navigateTo('shorts', { shortsCategoryId: categoryId, shortsStartIndex: startIndex });
   };
 
-  const handleUploadVideo = async (video: Video, videoFile?: File, thumbnailFile?: File) => {
+  const handleUploadVideo = async (video: Video, videoFile?: File, thumbnailFile?: File): Promise<void> => {
     // Add to local state immediately for UI feedback
     setUserVideos([video, ...userVideos]);
 
-    // Show success notification
-    if (isAuthenticated) {
+    // Upload to backend if user is authenticated
+    if (user && videoFile) {
+      console.log('🎬 Starting video upload...', video.title);
+      
       try {
+        // Use direct storage upload (bypasses Edge Function payload limits)
+        const uploadedVideo = await uploadVideoToStorage(
+          videoFile,
+          thumbnailFile || null,
+          {
+            title: video.title,
+            description: video.description || '',
+            category: video.category as 'short' | 'long',
+            shortCategory: video.shortCategory,
+            duration: video.duration || 0,
+          }
+        );
+        
+        console.log('✅ Video uploaded successfully:', uploadedVideo);
+        
+        // Update local state with the uploaded video (has real URLs)
+        setUserVideos(prev => prev.map(v => v.id === video.id ? uploadedVideo : v));
+        
         const { toast } = await import('sonner@2.0.3');
         toast.success('Video uploaded successfully!');
       } catch (error) {
-        console.error('Error uploading video:', error);
+        console.error('❌ Video upload failed:', error);
         const { toast } = await import('sonner@2.0.3');
-        toast.error('Failed to upload video. Please try again.');
+        toast.error(error instanceof Error ? error.message : 'Failed to upload video');
         
         // Remove from local state on error
         setUserVideos(prev => prev.filter(v => v.id !== video.id));
+        
+        throw error; // Re-throw so the upload dialog knows it failed
       }
     }
   };
@@ -346,9 +397,7 @@ function AppContent() {
       ...prev,
       [videoId]: [newComment, ...(prev[videoId] || [])]
     }));
-
-    // Comment is already added via optimistic update
-  }, [userDisplayName, user, isAuthenticated]);
+  }, [userDisplayName, user]);
 
   const handleReactToVideo = useCallback(async (videoId: string) => {
     // Optimistic update
@@ -361,9 +410,7 @@ function AppContent() {
       }
       return newSet;
     });
-
-    // Like is already toggled via optimistic update
-  }, [isAuthenticated]);
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
@@ -489,22 +536,10 @@ function AppContent() {
               </motion.div>
             )}
 
-            {/* Right Icons */}
+            {/* Right Icons - Profile Button */}
             {currentScreen !== 'profile' && currentScreen !== 'search' && (
               <div className="flex items-center gap-3">
-                {!isAuthenticated && (
-                  <motion.button
-                    className="px-4 py-2 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-ios text-sm flex items-center gap-2"
-                    onClick={() => setShowAuthScreen(true)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Login
-                  </motion.button>
-                )}
-                {isAuthenticated && (
+                {isAuthenticated ? (
                   <motion.button
                     className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
                     onClick={() => navigateTo('profile')}
@@ -513,6 +548,16 @@ function AppContent() {
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   >
                     {userAvatar}
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-ios"
+                    onClick={() => setShowAuthScreen(true)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  >
+                    Login
                   </motion.button>
                 )}
               </div>
@@ -548,6 +593,7 @@ function AppContent() {
                 onProfileClick={() => navigateTo('profile')}
                 onLeaderboardClick={() => navigateTo('leaderboard')}
                 onSearchClick={() => navigateTo('search')}
+                onShowAuthScreen={() => setShowAuthScreen(true)}
                 showShorts={showShorts}
                 shortsLimit={shortsLimit}
                 currentUserId="user_account"
@@ -756,7 +802,7 @@ function AppContent() {
         currentUserId="user_account"
       />
 
-      {/* Auth Screen */}
+      {/* Auth Screen Modal */}
       <AnimatePresence>
         {showAuthScreen && (
           <AuthScreen onClose={() => setShowAuthScreen(false)} />

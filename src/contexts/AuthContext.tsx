@@ -1,101 +1,141 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  displayName: string;
-  username: string;
-  avatar?: string;
-  bio?: string;
-  followers?: number;
-  following?: number;
-  isVerified?: boolean;
-}
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createClient } from '../utils/supabase/client';
+import { authApi } from '../services/api';
+import { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
   isLoading: boolean;
+  isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, displayName: string, username?: string) => Promise<void>;
-  logout: () => void;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+  signup: (email: string, password: string, username: string, displayName?: string) => Promise<void>;
+  logout: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
+  // Check for existing session on mount
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        console.log('🔄 AuthContext: Initializing auth...');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log('🔄 AuthContext: Session found, fetching user profile...');
+          try {
+            const userProfile = await authApi.getCurrentUser();
+            setUser(userProfile);
+            console.log('✅ AuthContext: User profile loaded:', userProfile);
+          } catch (error) {
+            console.warn('⚠️ AuthContext: Failed to fetch user profile, clearing session:', error);
+            await supabase.auth.signOut();
+          }
+        } else {
+          console.log('ℹ️ AuthContext: No existing session found');
+        }
+      } catch (error) {
+        console.error('❌ AuthContext: Error initializing auth:', error);
+      } finally {
+        setIsLoading(false);
+        console.log('✅ AuthContext: Initialization complete');
+      }
+    };
 
-// Mock user for demo
-const MOCK_USER: User = {
-  id: 'mock-user-1',
-  email: 'demo@dorphin.com',
-  displayName: 'Demo User',
-  username: 'demo_user',
-  avatar: '#FF6B9D',
-  bio: 'Welcome to Dorphin!',
-  followers: 12500,
-  following: 384,
-  isVerified: true,
-};
+    initAuth();
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(MOCK_USER);
-  const [isLoading] = useState(false);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔄 AuthContext: Auth state changed:', event);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        try {
+          const userProfile = await authApi.getCurrentUser();
+          setUser(userProfile);
+          console.log('✅ AuthContext: User signed in:', userProfile);
+        } catch (error) {
+          console.error('❌ AuthContext: Error getting user profile on sign in:', error);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        console.log('✅ AuthContext: User signed out');
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('🔄 AuthContext: Token refreshed');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const login = async (email: string, password: string) => {
-    // Mock login - always succeeds
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setUser(MOCK_USER);
+    console.log('🔐 AuthContext: Logging in...');
+    const response = await authApi.signin(email, password);
+    setUser(response.user);
+    console.log('✅ AuthContext: Login successful');
   };
 
-  const signup = async (email: string, password: string, displayName: string, username?: string) => {
-    // Mock signup - always succeeds
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newUser: User = {
-      id: 'mock-user-' + Date.now(),
-      email,
-      displayName,
-      username: username || email.split('@')[0],
-      avatar: '#FF6B9D',
-      followers: 0,
-      following: 0,
-      isVerified: false,
-    };
-    setUser(newUser);
+  const signup = async (email: string, password: string, username: string, displayName?: string) => {
+    console.log('📝 AuthContext: Signing up...');
+    const response = await authApi.signup(email, password, username, displayName);
+    setUser(response.user);
+    console.log('✅ AuthContext: Signup successful');
   };
 
-  const logout = () => {
-    setUser(null);
-  };
-
-  const updateProfile = async (data: Partial<User>) => {
-    // Mock update
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (user) {
-      setUser({ ...user, ...data });
+  const logout = async () => {
+    console.log('🚪 AuthContext: Logging out...');
+    try {
+      // Try to call API signout, but don't fail if it errors
+      await authApi.signout();
+    } catch (error) {
+      console.warn('⚠️ AuthContext: API signout failed (expected if token expired):', error);
     }
+    
+    // Always sign out from Supabase and clear local state
+    await supabase.auth.signOut();
+    setUser(null);
+    console.log('✅ AuthContext: Logout successful');
   };
 
-  const value = {
-    user,
-    isAuthenticated: !!user,
-    isLoading,
-    login,
-    signup,
-    logout,
-    updateProfile,
+  const signInWithGoogle = async () => {
+    console.log('🔐 AuthContext: Signing in with Google...');
+    await authApi.signInWithOAuth('google');
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+  const signInWithApple = async () => {
+    console.log('🔐 AuthContext: Signing in with Apple...');
+    await authApi.signInWithOAuth('apple');
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        signup,
+        logout,
+        signInWithGoogle,
+        signInWithApple,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
