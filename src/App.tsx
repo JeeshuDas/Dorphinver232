@@ -1,7 +1,7 @@
-import { uploadVideoToStorage } from './services/videoUpload';
-import { videoApi, userApi, commentApi } from './services/api';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Video } from './types';
+import { localBackendApi } from './services/localBackendApi';
+import { videoApi, userApi, commentApi } from './services/api';
 import { HomeScreen } from './components/HomeScreen';
 import { ShortsScreen } from './components/ShortsScreen';
 import { ProfileScreen } from './components/ProfileScreen';
@@ -11,6 +11,7 @@ import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
+import { BackendStatusBanner } from './components/BackendStatusBanner';
 import { Search, Mic, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
@@ -33,7 +34,7 @@ interface NavigationStackEntry {
 
 function AppContent() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
-  const { refreshAll, isRefreshing, searchVideos, clearSearch, searchResults, isSearching } = useData();
+  const { refreshAll, isRefreshing, searchVideos, clearSearch, searchResults, isSearching, isBackendConnected } = useData();
   
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const [navigationStack, setNavigationStack] = useState<NavigationStackEntry[]>([{ screen: 'home' }]);
@@ -314,18 +315,14 @@ function AppContent() {
   };
 
   const handleUploadVideo = async (video: Video, videoFile?: File, thumbnailFile?: File): Promise<void> => {
-    // Add to local state immediately for UI feedback
-    setUserVideos([video, ...userVideos]);
-
-    // Upload to backend if user is authenticated
-    if (user && videoFile) {
-      console.log('🎬 Starting video upload...', video.title);
+    // Upload to local backend if video file is provided
+    if (videoFile) {
+      console.log('🎬 [APP] Starting video upload to local backend...', video.title);
       
       try {
-        // Use direct storage upload (bypasses Edge Function payload limits)
-        const uploadedVideo = await uploadVideoToStorage(
+        // Upload to local backend
+        const uploadedVideo = await localBackendApi.uploadVideo(
           videoFile,
-          thumbnailFile || null,
           {
             title: video.title,
             description: video.description || '',
@@ -335,23 +332,26 @@ function AppContent() {
           }
         );
         
-        console.log('✅ Video uploaded successfully:', uploadedVideo);
+        console.log('✅ [APP] Video uploaded successfully:', uploadedVideo);
         
-        // Update local state with the uploaded video (has real URLs)
-        setUserVideos(prev => prev.map(v => v.id === video.id ? uploadedVideo : v));
+        // Add to user videos
+        setUserVideos([uploadedVideo, ...userVideos]);
+        
+        // Save to localStorage
+        localBackendApi.saveToLocalStorage();
         
         const { toast } = await import('sonner@2.0.3');
-        toast.success('Video uploaded successfully!');
+        toast.success('Video uploaded successfully to local storage!');
       } catch (error) {
-        console.error('❌ Video upload failed:', error);
+        console.error('❌ [APP] Video upload failed:', error);
         const { toast } = await import('sonner@2.0.3');
         toast.error(error instanceof Error ? error.message : 'Failed to upload video');
         
-        // Remove from local state on error
-        setUserVideos(prev => prev.filter(v => v.id !== video.id));
-        
         throw error; // Re-throw so the upload dialog knows it failed
       }
+    } else {
+      // If no video file, just add the video object (for backward compatibility)
+      setUserVideos([video, ...userVideos]);
     }
   };
 
@@ -438,6 +438,9 @@ function AppContent() {
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
+      {/* Backend Status Banner */}
+      <BackendStatusBanner isConnected={isBackendConnected} />
+      
       {/* Navigation Stack Depth Indicator (Development) */}
       {process.env.NODE_ENV === 'development' && navigationStack.length > 1 && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
