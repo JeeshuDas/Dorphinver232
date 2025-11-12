@@ -3,9 +3,12 @@
  */
 
 import { createClient } from '../utils/supabase/client';
-import { projectId } from '../utils/supabase/info';
+import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-148a8522`;
+
+// Mock user ID for demo purposes (matches AuthContext mock user)
+const MOCK_USER_ID = 'demo-user-id';
 
 export async function uploadVideoToStorage(
   videoFile: File,
@@ -23,14 +26,15 @@ export async function uploadVideoToStorage(
 
   const supabase = createClient();
   
-  // Get current user session
+  // Get current user session (if available)
   const { data: { session } } = await supabase.auth.getSession();
   
-  if (!session?.user) {
-    throw new Error('You must be logged in to upload videos');
-  }
+  // Use session user ID if available, otherwise use mock user ID
+  const userId = session?.user?.id || MOCK_USER_ID;
+  const accessToken = session?.access_token || publicAnonKey;
+  
+  console.log('👤 Using user ID:', userId);
 
-  const userId = session.user.id;
   const videoId = `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Upload video directly to Supabase Storage
@@ -81,7 +85,7 @@ export async function uploadVideoToStorage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
       videoId,

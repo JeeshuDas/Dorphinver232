@@ -4,6 +4,7 @@ import { mockVideos } from '../data/mockData';
 import { Search, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useData } from '../providers/DataProvider';
 
 interface SearchScreenProps {
   onVideoClick: (video: Video) => void;
@@ -13,9 +14,8 @@ interface SearchScreenProps {
 
 export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
   const { isAuthenticated } = useAuth();
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Video[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { searchVideos, clearSearch, searchResults, isSearching } = useData();
+  const [displayedResults, setDisplayedResults] = useState<Video[]>([]);
   
   const formatViews = (views: number) => {
     if (views >= 1000000) return (views / 1000000).toFixed(1) + 'M';
@@ -23,41 +23,54 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
     return views.toString();
   };
 
-  // Search with backend when authenticated
+  // Search with backend when authenticated, or mock data otherwise
   useEffect(() => {
-    const searchVideos = async () => {
+    const performSearch = async () => {
       if (!searchQuery.trim()) {
-        setSearchResults(mockVideos);
+        // Show all videos when search is empty
+        clearSearch();
+        setDisplayedResults(mockVideos);
         return;
       }
 
-      // Use mock data for search
-      setIsSearching(true);
-      
-      // Simulate search delay
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const query = searchQuery.toLowerCase();
-      const filtered = mockVideos.filter(
-        (video) =>
-          video.title.toLowerCase().includes(query) ||
-          video.creator.toLowerCase().includes(query)
-      );
-      setSearchResults(filtered);
-      setIsSearching(false);
+      if (isAuthenticated) {
+        // Use backend search when authenticated
+        console.log('🔍 Performing backend search for:', searchQuery);
+        await searchVideos(searchQuery);
+      } else {
+        // Use mock data search when not authenticated
+        const query = searchQuery.toLowerCase();
+        const filtered = mockVideos.filter(
+          (video) =>
+            video.title.toLowerCase().includes(query) ||
+            video.creator.toLowerCase().includes(query) ||
+            (video.description && video.description.toLowerCase().includes(query))
+        );
+        setDisplayedResults(filtered);
+      }
     };
 
     const debounceTimer = setTimeout(() => {
-      searchVideos();
+      performSearch();
     }, 300);
 
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery, isAuthenticated]);
+  }, [searchQuery, isAuthenticated, searchVideos, clearSearch]);
+
+  // Update displayed results when searchResults change
+  useEffect(() => {
+    if (isAuthenticated && searchResults.length > 0) {
+      setDisplayedResults(searchResults);
+    } else if (isAuthenticated && searchQuery && !isSearching) {
+      // No results from backend
+      setDisplayedResults([]);
+    }
+  }, [searchResults, isAuthenticated, searchQuery, isSearching]);
 
   const filteredVideos = useMemo(() => {
     if (!searchQuery.trim()) return mockVideos;
-    return searchResults;
-  }, [searchQuery, searchResults]);
+    return displayedResults;
+  }, [searchQuery, displayedResults]);
 
   return (
     <div className="h-full overflow-y-auto scrollbar-hide pb-6 bg-background">
@@ -73,7 +86,6 @@ export function SearchScreen({ onVideoClick, searchQuery }: SearchScreenProps) {
             ) : (
               <>
                 {filteredVideos.length} results
-                {error && <span className="text-yellow-500 text-xs">({error})</span>}
               </>
             )}
           </p>

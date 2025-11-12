@@ -110,22 +110,47 @@ export const authApi = {
   },
 
   signin: async (email: string, password: string) => {
-    const response = await apiRequest('/auth/signin', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }, false);
+    console.log('🔐 [SIGNIN] Starting sign-in process for:', email);
+    
+    try {
+      const response = await apiRequest('/auth/signin', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }, false);
 
-    // Set session in Supabase client
-    if (response.session) {
-      const supabase = createClient();
-      await supabase.auth.setSession({
-        access_token: response.session.access_token,
-        refresh_token: response.session.refresh_token,
-      });
-      console.log('✅ Session stored in Supabase client');
+      console.log('✅ [SIGNIN] Backend response received:', response);
+
+      // Set session in Supabase client
+      if (response.session) {
+        console.log('🔑 [SIGNIN] Setting session in Supabase client...');
+        const supabase = createClient();
+        
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: response.session.access_token,
+            refresh_token: response.session.refresh_token,
+          });
+          
+          if (error) {
+            console.error('❌ [SIGNIN] Error setting session:', error);
+            throw new Error(`Failed to set session: ${error.message}`);
+          }
+          
+          console.log('✅ [SIGNIN] Session stored successfully:', data);
+        } catch (sessionError: any) {
+          console.error('❌ [SIGNIN] Session storage error:', sessionError);
+          throw new Error(`Session storage failed: ${sessionError.message}`);
+        }
+      } else {
+        console.warn('⚠️ [SIGNIN] No session in response:', response);
+      }
+
+      console.log('✅ [SIGNIN] Sign-in complete, returning response');
+      return response;
+    } catch (error: any) {
+      console.error('❌ [SIGNIN] Sign-in failed:', error);
+      throw error;
     }
-
-    return response;
   },
 
   signInWithOAuth: async (provider: 'google' | 'apple') => {
@@ -328,6 +353,21 @@ export const videoApi = {
   async checkLiked(videoId: string) {
     const data = await apiRequest(`/videos/${videoId}/liked`, {}, true);
     return data.liked;
+  },
+
+  async searchVideos(query: string) {
+    if (!query || query.trim() === '') {
+      return { videos: [] };
+    }
+
+    const params = new URLSearchParams({
+      q: query.trim(),
+    });
+    
+    console.log('🔍 Searching videos with query:', query);
+    const data = await apiRequest(`/videos/search?${params}`);
+    console.log('✅ Search results:', data);
+    return data;
   },
 };
 

@@ -1,8 +1,9 @@
-import { Hono } from 'npm:hono';
+import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
+import { videoDb, reactionDb, commentDb, followDb } from './db.tsx';
 
 const app = new Hono();
 
@@ -35,6 +36,27 @@ const requireAuth = async (c: any, next: any) => {
 
   const token = authHeader.split(' ')[1];
   const supabase = getAdminClient();
+  
+  // Check if this is the public anon key (for mock user mode)
+  const publicAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  
+  if (token === publicAnonKey) {
+    // Mock user mode - allow access with demo user ID
+    console.log('🎭 Using mock user mode (demo user)');
+    c.set('userId', 'demo-user-id');
+    c.set('user', {
+      id: 'demo-user-id',
+      email: 'demo@dorphin.app',
+      user_metadata: {
+        username: 'demo_user',
+        displayName: 'Demo User'
+      }
+    });
+    await next();
+    return;
+  }
+  
+  // Otherwise, validate the actual auth token
   const { data: { user }, error } = await supabase.auth.getUser(token);
 
   if (error || !user) {
@@ -54,24 +76,62 @@ const initializeStorage = async () => {
   const thumbnailBucketName = 'make-148a8522-dorphin-thumbnails';
   const profileBucketName = 'make-148a8522-dorphin-profiles';
 
-  const { data: buckets } = await supabase.storage.listBuckets();
-  
-  const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
-  if (!bucketExists) {
-    await supabase.storage.createBucket(bucketName, { public: false });
-    console.log(`Created bucket: ${bucketName}`);
-  }
+  try {
+    console.log('🔧 Initializing storage buckets...');
+    
+    // Helper function to ensure bucket exists with proper config
+    const ensureBucket = async (name: string, options: any) => {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const exists = buckets?.some(bucket => bucket.name === name);
+      
+      if (!exists) {
+        console.log(`📦 Creating bucket: ${name}...`);
+        const { data, error } = await supabase.storage.createBucket(name, options);
+        
+        if (error) {
+          console.error(`❌ Error creating bucket ${name}:`, error.message);
+          return false;
+        } else {
+          console.log(`✅ Created bucket: ${name}`);
+          return true;
+        }
+      } else {
+        // Bucket exists - check if we need to update it
+        console.log(`✓ Bucket already exists: ${name}`);
+        
+        // Try to update bucket to ensure proper settings
+        const { error: updateError } = await supabase.storage.updateBucket(name, options);
+        if (updateError) {
+          console.log(`ℹ️  Could not update bucket ${name} (likely no changes needed):`, updateError.message);
+        }
+        return true;
+      }
+    };
 
-  const thumbnailBucketExists = buckets?.some(bucket => bucket.name === thumbnailBucketName);
-  if (!thumbnailBucketExists) {
-    await supabase.storage.createBucket(thumbnailBucketName, { public: false });
-    console.log(`Created bucket: ${thumbnailBucketName}`);
-  }
+    // Create/ensure buckets with proper configuration
+    // Using public: true to avoid RLS issues, access control is done via signed URLs
+    await ensureBucket(bucketName, { 
+      public: true, // Make public to avoid RLS
+      fileSizeLimit: 524288000, // 500MB
+      allowedMimeTypes: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm']
+    });
 
-  const profileBucketExists = buckets?.some(bucket => bucket.name === profileBucketName);
-  if (!profileBucketExists) {
-    await supabase.storage.createBucket(profileBucketName, { public: false });
-    console.log(`Created bucket: ${profileBucketName}`);
+    await ensureBucket(thumbnailBucketName, { 
+      public: true, // Make public to avoid RLS
+      fileSizeLimit: 10485760, // 10MB
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    });
+
+    await ensureBucket(profileBucketName, { 
+      public: true, // Make public to avoid RLS
+      fileSizeLimit: 5242880, // 5MB
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp']
+    });
+
+    console.log('✅ Storage buckets initialized successfully');
+    
+  } catch (error: any) {
+    console.error('❌ Error initializing storage:', error.message);
   }
 };
 
@@ -81,50 +141,39 @@ const initializeTestUser = async () => {
     const supabase = getAdminClient();
     const testEmail = 'demo@dorphin.app';
     const testPassword = 'demo123456';
+    const demoUserId = 'demo-user-id';
     
-    // Check if test user already exists in KV store
-    const existingUsers = await kv.getByPrefix('user:');
-    const testUserExists = existingUsers.some((u: any) => u.email === testEmail);
+    // Check if demo user profile exists in KV store
+    const demoUserProfile = await kv.get(`user:${demoUserId}`);
     
-    if (!testUserExists) {
-      console.log('Creating test user...');
+    if (!demoUserProfile) {
+      console.log('Creating demo user profile in KV store...');
       
-      // Create test user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: testEmail,
-        password: testPassword,
-        email_confirm: true,
-        user_metadata: { displayName: 'Demo User', username: 'demo' }
-      });
-
-      if (authError) {
-        console.error('Test user creation error:', authError);
-        return;
-      }
-
-      // Create user profile in KV store
+      // Create demo user profile in KV store (without Supabase Auth for now)
       const userProfile = {
-        id: authData.user.id,
+        id: demoUserId,
         email: testEmail,
         displayName: 'Demo User',
-        username: 'demo',
+        username: 'demo_user',
         avatar: '#8b5cf6',
-        bio: 'Welcome to Dorphin! This is a demo account.',
+        bio: 'Exploring amazing content on Dorphin',
         followers: 0,
         following: 0,
-        isVerified: true,
+        isVerified: false,
         createdAt: new Date().toISOString(),
       };
 
-      await kv.set(`user:${authData.user.id}`, userProfile);
-      await kv.set(`username:demo`, authData.user.id);
+      await kv.set(`user:${demoUserId}`, userProfile);
+      await kv.set(`username:demo_user`, demoUserId);
       
-      console.log('✅ Test user created successfully!');
+      console.log('✅ Demo user profile created successfully!');
+      console.log('👤 User ID:', demoUserId);
       console.log('📧 Email: demo@dorphin.app');
-      console.log('🔑 Password: demo123456');
+    } else {
+      console.log('✅ Demo user profile already exists');
     }
   } catch (error) {
-    console.error('Error initializing test user:', error);
+    console.error('Error initializing demo user:', error);
   }
 };
 
@@ -612,23 +661,52 @@ app.post('/make-server-148a8522/videos/upload', requireAuth, async (c) => {
       title,
       description: description || '',
       creator: userProfile?.displayName || 'Unknown',
-      creatorId: userId,
-      creatorAvatar: userProfile?.avatar || '#FF6B9D',
+      creator_id: userId,
+      creator_avatar: userProfile?.avatar || '#FF6B9D',
       thumbnail: thumbnailUrl,
-      videoUrl: videoUrlData?.signedUrl || '',
-      videoPath, // Store path for regenerating signed URLs
-      thumbnailPath: thumbnailFile ? `${userId}/${videoId}_thumb.${thumbnailFile.name.split('.').pop()}` : '',
+      video_url: videoUrlData?.signedUrl || '',
+      video_path: videoPath, // Store path for regenerating signed URLs
+      thumbnail_path: thumbnailFile ? `${userId}/${videoId}_thumb.${thumbnailFile.name.split('.').pop()}` : '',
       duration: duration || 0,
       category,
-      shortCategory: category === 'short' ? shortCategory : undefined,
+      short_category: category === 'short' ? shortCategory : undefined,
       views: 0,
       likes: 0,
       comments: 0,
-      uploadDate: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
+      upload_date: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
-    await kv.set(`video:${videoId}`, videoMetadata);
+    // Save to database (persistent storage)
+    try {
+      await videoDb.create(videoMetadata);
+      console.log('✅ Video saved to database successfully:', videoId);
+    } catch (dbError: any) {
+      console.error('❌ Database save error (will fallback to KV):', dbError);
+      // Fallback: save to KV if database fails
+      await kv.set(`video:${videoId}`, {
+        ...videoMetadata,
+        creatorId: userId,  // Keep both formats for compatibility
+        videoUrl: videoMetadata.video_url,
+        videoPath: videoMetadata.video_path,
+        thumbnailPath: videoMetadata.thumbnail_path,
+        shortCategory: videoMetadata.short_category,
+        creatorAvatar: videoMetadata.creator_avatar,
+        uploadDate: videoMetadata.upload_date,
+      });
+    }
+    
+    // Also save to KV for backwards compatibility and faster access
+    await kv.set(`video:${videoId}`, {
+      ...videoMetadata,
+      creatorId: userId,  // Keep camelCase for compatibility
+      videoUrl: videoMetadata.video_url,
+      videoPath: videoMetadata.video_path,
+      thumbnailPath: videoMetadata.thumbnail_path,
+      shortCategory: videoMetadata.short_category,
+      creatorAvatar: videoMetadata.creator_avatar,
+      uploadDate: videoMetadata.upload_date,
+    });
     
     // Add to user's videos list
     const userVideosKey = `user:${userId}:videos`;
@@ -642,7 +720,27 @@ app.post('/make-server-148a8522/videos/upload', requireAuth, async (c) => {
     categoryVideos.unshift(videoId);
     await kv.set(categoryKey, categoryVideos);
 
-    return c.json({ video: videoMetadata });
+    // Return camelCase for frontend compatibility
+    return c.json({ video: {
+      id: videoId,
+      title,
+      description: description || '',
+      creator: userProfile?.displayName || 'Unknown',
+      creatorId: userId,
+      creatorAvatar: userProfile?.avatar || '#FF6B9D',
+      thumbnail: thumbnailUrl,
+      videoUrl: videoUrlData?.signedUrl || '',
+      videoPath,
+      thumbnailPath: thumbnailFile ? `${userId}/${videoId}_thumb.${thumbnailFile.name.split('.').pop()}` : '',
+      duration: duration || 0,
+      category,
+      shortCategory: category === 'short' ? shortCategory : undefined,
+      views: 0,
+      likes: 0,
+      comments: 0,
+      uploadDate: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    } });
   } catch (error: any) {
     console.error('Video upload error:', error);
     return c.json({ error: `Video upload failed: ${error.message}` }, 500);
@@ -760,6 +858,47 @@ app.get('/make-server-148a8522/videos/feed', async (c) => {
   } catch (error: any) {
     console.error('Get feed error:', error);
     return c.json({ error: `Failed to get feed: ${error.message}` }, 500);
+  }
+});
+
+// Search videos
+app.get('/make-server-148a8522/videos/search', async (c) => {
+  try {
+    const query = c.req.query('q')?.toLowerCase() || '';
+    
+    if (!query || query.trim() === '') {
+      return c.json({ videos: [], total: 0 });
+    }
+
+    console.log('🔍 Searching videos with query:', query);
+
+    // Get all video IDs
+    const shorts = await kv.get('videos:shorts') || [];
+    const longs = await kv.get('videos:long') || [];
+    const allVideoIds = [...longs, ...shorts];
+
+    // Fetch all videos
+    const allVideos = await kv.mget(allVideoIds.map(id => `video:${id}`));
+
+    // Filter videos by title or description (case-insensitive partial match)
+    const matchingVideos = allVideos.filter(video => {
+      if (!video) return false;
+      
+      const title = (video.title || '').toLowerCase();
+      const description = (video.description || '').toLowerCase();
+      
+      return title.includes(query) || description.includes(query);
+    });
+
+    console.log(`✅ Found ${matchingVideos.length} matching videos`);
+
+    return c.json({ 
+      videos: matchingVideos,
+      total: matchingVideos.length
+    });
+  } catch (error: any) {
+    console.error('Search videos error:', error);
+    return c.json({ error: `Failed to search videos: ${error.message}` }, 500);
   }
 });
 
@@ -972,14 +1111,144 @@ app.get('/make-server-148a8522/videos/:videoId/comments', async (c) => {
 
 // ==================== FOLLOW ROUTES ====================
 
-// Follow/unfollow user
+// Follow a user
 app.post('/make-server-148a8522/users/:targetUserId/follow', requireAuth, async (c) => {
   try {
     const userId = c.get('userId');
     const targetUserId = c.req.param('targetUserId');
 
+    // 🚫 Prevent self-follow
     if (userId === targetUserId) {
-      return c.json({ error: 'Cannot follow yourself' }, 400);
+      return c.json({ error: 'You cannot follow yourself' }, 400);
+    }
+
+    // Check if target user exists
+    const targetUser = await kv.get(`user:${targetUserId}`);
+    if (!targetUser) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    const followKey = `follow:${userId}:${targetUserId}`;
+    const existingFollow = await kv.get(followKey);
+
+    // Already following - return error
+    if (existingFollow) {
+      return c.json({ error: 'Already following this user' }, 400);
+    }
+
+    const currentUser = await kv.get(`user:${userId}`);
+
+    // Create follow relationship
+    await kv.set(followKey, { 
+      followerId: userId, 
+      followingId: targetUserId,
+      createdAt: new Date().toISOString() 
+    });
+
+    // Update follower/following counts
+    currentUser.following = (currentUser.following || 0) + 1;
+    targetUser.followers = (targetUser.followers || 0) + 1;
+    
+    await kv.set(`user:${userId}`, currentUser);
+    await kv.set(`user:${targetUserId}`, targetUser);
+
+    // Add to following/followers lists for easier querying
+    const followingListKey = `user:${userId}:following`;
+    const followingList = await kv.get(followingListKey) || [];
+    if (!followingList.includes(targetUserId)) {
+      followingList.push(targetUserId);
+      await kv.set(followingListKey, followingList);
+    }
+
+    const followersListKey = `user:${targetUserId}:followers`;
+    const followersList = await kv.get(followersListKey) || [];
+    if (!followersList.includes(userId)) {
+      followersList.push(userId);
+      await kv.set(followersListKey, followersList);
+    }
+
+    console.log(`✅ User ${userId} followed ${targetUserId}`);
+
+    return c.json({ 
+      following: true, 
+      followers: targetUser.followers,
+      message: 'Successfully followed user'
+    });
+  } catch (error: any) {
+    console.error('Follow error:', error);
+    return c.json({ error: `Failed to follow user: ${error.message}` }, 500);
+  }
+});
+
+// Unfollow a user
+app.delete('/make-server-148a8522/users/:targetUserId/follow', requireAuth, async (c) => {
+  try {
+    const userId = c.get('userId');
+    const targetUserId = c.req.param('targetUserId');
+
+    // 🚫 Prevent self-unfollow (shouldn't happen but check anyway)
+    if (userId === targetUserId) {
+      return c.json({ error: 'Invalid operation' }, 400);
+    }
+
+    const followKey = `follow:${userId}:${targetUserId}`;
+    const existingFollow = await kv.get(followKey);
+
+    // Not following - return error
+    if (!existingFollow) {
+      return c.json({ error: 'Not following this user' }, 400);
+    }
+
+    const currentUser = await kv.get(`user:${userId}`);
+    const targetUser = await kv.get(`user:${targetUserId}`);
+
+    if (!targetUser) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Remove follow relationship
+    await kv.del(followKey);
+    
+    // Update follower/following counts
+    currentUser.following = Math.max(0, (currentUser.following || 0) - 1);
+    targetUser.followers = Math.max(0, (targetUser.followers || 0) - 1);
+    
+    await kv.set(`user:${userId}`, currentUser);
+    await kv.set(`user:${targetUserId}`, targetUser);
+
+    // Remove from following/followers lists
+    const followingListKey = `user:${userId}:following`;
+    const followingList = await kv.get(followingListKey) || [];
+    const updatedFollowingList = followingList.filter((id: string) => id !== targetUserId);
+    await kv.set(followingListKey, updatedFollowingList);
+
+    const followersListKey = `user:${targetUserId}:followers`;
+    const followersList = await kv.get(followersListKey) || [];
+    const updatedFollowersList = followersList.filter((id: string) => id !== userId);
+    await kv.set(followersListKey, updatedFollowersList);
+
+    console.log(`✅ User ${userId} unfollowed ${targetUserId}`);
+
+    return c.json({ 
+      following: false, 
+      followers: targetUser.followers,
+      message: 'Successfully unfollowed user'
+    });
+  } catch (error: any) {
+    console.error('Unfollow error:', error);
+    return c.json({ error: `Failed to unfollow user: ${error.message}` }, 500);
+  }
+});
+
+// Toggle follow/unfollow (for convenience)
+app.post('/make-server-148a8522/users/:targetUserId/toggle-follow', requireAuth, async (c) => {
+  try {
+    const userId = c.get('userId');
+    const targetUserId = c.req.param('targetUserId');
+
+    // 🚫 Prevent self-follow
+    if (userId === targetUserId) {
+      return c.json({ error: 'You cannot follow yourself' }, 400);
     }
 
     const targetUser = await kv.get(`user:${targetUserId}`);
@@ -989,7 +1258,6 @@ app.post('/make-server-148a8522/users/:targetUserId/follow', requireAuth, async 
 
     const followKey = `follow:${userId}:${targetUserId}`;
     const existingFollow = await kv.get(followKey);
-
     const currentUser = await kv.get(`user:${userId}`);
 
     if (existingFollow) {
@@ -1001,6 +1269,17 @@ app.post('/make-server-148a8522/users/:targetUserId/follow', requireAuth, async 
       
       await kv.set(`user:${userId}`, currentUser);
       await kv.set(`user:${targetUserId}`, targetUser);
+
+      // Remove from lists
+      const followingListKey = `user:${userId}:following`;
+      const followingList = await kv.get(followingListKey) || [];
+      await kv.set(followingListKey, followingList.filter((id: string) => id !== targetUserId));
+
+      const followersListKey = `user:${targetUserId}:followers`;
+      const followersList = await kv.get(followersListKey) || [];
+      await kv.set(followersListKey, followersList.filter((id: string) => id !== userId));
+
+      console.log(`✅ User ${userId} unfollowed ${targetUserId}`);
 
       return c.json({ 
         following: false, 
@@ -1020,23 +1299,45 @@ app.post('/make-server-148a8522/users/:targetUserId/follow', requireAuth, async 
       await kv.set(`user:${userId}`, currentUser);
       await kv.set(`user:${targetUserId}`, targetUser);
 
+      // Add to lists
+      const followingListKey = `user:${userId}:following`;
+      const followingList = await kv.get(followingListKey) || [];
+      if (!followingList.includes(targetUserId)) {
+        followingList.push(targetUserId);
+        await kv.set(followingListKey, followingList);
+      }
+
+      const followersListKey = `user:${targetUserId}:followers`;
+      const followersList = await kv.get(followersListKey) || [];
+      if (!followersList.includes(userId)) {
+        followersList.push(userId);
+        await kv.set(followersListKey, followersList);
+      }
+
+      console.log(`✅ User ${userId} followed ${targetUserId}`);
+
       return c.json({ 
         following: true, 
         followers: targetUser.followers 
       });
     }
   } catch (error: any) {
-    console.error('Follow/unfollow error:', error);
-    return c.json({ error: `Failed to follow/unfollow: ${error.message}` }, 500);
+    console.error('Toggle follow error:', error);
+    return c.json({ error: `Failed to toggle follow: ${error.message}` }, 500);
   }
 });
 
-// Check if following user
+// Check if following a user (get follow status)
 app.get('/make-server-148a8522/users/:targetUserId/following', requireAuth, async (c) => {
   try {
     const userId = c.get('userId');
     const targetUserId = c.req.param('targetUserId');
     
+    // Can't follow yourself
+    if (userId === targetUserId) {
+      return c.json({ following: false, self: true });
+    }
+
     const followKey = `follow:${userId}:${targetUserId}`;
     const following = await kv.get(followKey);
 
@@ -1047,21 +1348,102 @@ app.get('/make-server-148a8522/users/:targetUserId/following', requireAuth, asyn
   }
 });
 
-// Get user's followers
+// Get follow status for multiple users (batch check)
+app.post('/make-server-148a8522/users/following/batch', requireAuth, async (c) => {
+  try {
+    const userId = c.get('userId');
+    const { userIds } = await c.req.json();
+
+    if (!Array.isArray(userIds)) {
+      return c.json({ error: 'userIds must be an array' }, 400);
+    }
+
+    const followStatuses: Record<string, boolean> = {};
+    
+    for (const targetUserId of userIds) {
+      if (userId === targetUserId) {
+        followStatuses[targetUserId] = false; // Can't follow yourself
+      } else {
+        const followKey = `follow:${userId}:${targetUserId}`;
+        const following = await kv.get(followKey);
+        followStatuses[targetUserId] = !!following;
+      }
+    }
+
+    return c.json({ followStatuses });
+  } catch (error: any) {
+    console.error('Batch check following error:', error);
+    return c.json({ error: `Failed to check following: ${error.message}` }, 500);
+  }
+});
+
+// Get user's followers list
 app.get('/make-server-148a8522/users/:userId/followers', async (c) => {
   try {
     const targetUserId = c.req.param('userId');
     
-    // Get all follows where followingId matches targetUserId
-    const allFollows = await kv.getByPrefix('follow:');
-    const followers = allFollows
-      .filter((follow: any) => follow?.followingId === targetUserId)
-      .map((follow: any) => follow?.followerId);
+    // Get followers list (optimized)
+    const followersListKey = `user:${targetUserId}:followers`;
+    const followerIds = await kv.get(followersListKey) || [];
+    
+    // Fetch user profiles for each follower
+    const followerProfiles = await Promise.all(
+      followerIds.map(async (followerId: string) => {
+        const user = await kv.get(`user:${followerId}`);
+        return user ? {
+          id: followerId,
+          username: user.username,
+          displayName: user.displayName,
+          avatar: user.avatar,
+          isVerified: user.isVerified || false,
+        } : null;
+      })
+    );
 
-    return c.json({ followers });
+    const validFollowers = followerProfiles.filter(f => f !== null);
+
+    return c.json({ 
+      followers: validFollowers,
+      count: validFollowers.length
+    });
   } catch (error: any) {
     console.error('Get followers error:', error);
     return c.json({ error: `Failed to get followers: ${error.message}` }, 500);
+  }
+});
+
+// Get user's following list
+app.get('/make-server-148a8522/users/:userId/following', async (c) => {
+  try {
+    const targetUserId = c.req.param('userId');
+    
+    // Get following list (optimized)
+    const followingListKey = `user:${targetUserId}:following`;
+    const followingIds = await kv.get(followingListKey) || [];
+    
+    // Fetch user profiles for each following
+    const followingProfiles = await Promise.all(
+      followingIds.map(async (followingId: string) => {
+        const user = await kv.get(`user:${followingId}`);
+        return user ? {
+          id: followingId,
+          username: user.username,
+          displayName: user.displayName,
+          avatar: user.avatar,
+          isVerified: user.isVerified || false,
+        } : null;
+      })
+    );
+
+    const validFollowing = followingProfiles.filter(f => f !== null);
+
+    return c.json({ 
+      following: validFollowing,
+      count: validFollowing.length
+    });
+  } catch (error: any) {
+    console.error('Get following error:', error);
+    return c.json({ error: `Failed to get following: ${error.message}` }, 500);
   }
 });
 
@@ -1069,6 +1451,86 @@ app.get('/make-server-148a8522/users/:userId/followers', async (c) => {
 
 app.get('/make-server-148a8522/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ==================== DATABASE DIAGNOSTICS ====================
+
+// Check database status and RLS policies
+app.get('/make-server-148a8522/diagnostics/database', async (c) => {
+  const results: any = {
+    timestamp: new Date().toISOString(),
+    checks: {},
+  };
+
+  try {
+    const supabase = getAdminClient();
+
+    // Check 1: Can we query the videos table?
+    try {
+      const { data, error } = await supabase.from('videos').select('id').limit(1);
+      results.checks.tableExists = !error;
+      results.checks.tableError = error?.message || null;
+      results.checks.videoCount = data?.length || 0;
+    } catch (err: any) {
+      results.checks.tableExists = false;
+      results.checks.tableError = err.message;
+    }
+
+    // Check 2: Can we insert a test row? (then delete it)
+    try {
+      const testVideo = {
+        id: 'test_diagnostic_delete_me',
+        title: 'Test Video',
+        description: 'Diagnostic test',
+        creator: 'Test',
+        creator_id: 'test',
+        video_url: 'https://test.com/test.mp4',
+        video_path: 'test/path',
+        category: 'short',
+      };
+
+      const { error: insertError } = await supabase.from('videos').insert(testVideo);
+      
+      if (insertError) {
+        results.checks.canInsert = false;
+        results.checks.insertError = insertError.message;
+        results.checks.rlsIssue = insertError.message.includes('row-level security');
+      } else {
+        results.checks.canInsert = true;
+        // Clean up test video
+        await supabase.from('videos').delete().eq('id', 'test_diagnostic_delete_me');
+      }
+    } catch (err: any) {
+      results.checks.canInsert = false;
+      results.checks.insertError = err.message;
+    }
+
+    // Check 3: Environment variables
+    results.checks.hasServiceRoleKey = !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    results.checks.hasAnonKey = !!Deno.env.get('SUPABASE_ANON_KEY');
+    results.checks.hasUrl = !!Deno.env.get('SUPABASE_URL');
+
+    // Overall status
+    results.status = results.checks.tableExists && results.checks.canInsert ? 'healthy' : 'issues_detected';
+
+    // Recommendations
+    results.recommendations = [];
+    if (!results.checks.tableExists) {
+      results.recommendations.push('Run migration: /supabase/migrations/001_create_videos_table.sql');
+    }
+    if (results.checks.rlsIssue) {
+      results.recommendations.push('Fix RLS: Run /supabase/FIX_RLS_MANUAL.sql in Supabase Dashboard');
+      results.recommendations.push('See /supabase/README_FIX_RLS.md for detailed instructions');
+    }
+
+    return c.json(results);
+  } catch (error: any) {
+    return c.json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+    }, 500);
+  }
 });
 
 console.log('🚀 Dorphin backend server starting...');

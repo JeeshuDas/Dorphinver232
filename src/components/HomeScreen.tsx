@@ -23,6 +23,7 @@ interface HomeScreenProps {
   onLeaderboardClick?: () => void;
   onSearchClick?: () => void;
   onShowAuthScreen?: () => void;
+  onLogoClick?: () => void;
   showShorts?: boolean;
   shortsLimit?: number;
   currentUserId?: string;
@@ -44,6 +45,7 @@ export function HomeScreen({
   onLeaderboardClick, 
   onSearchClick, 
   onShowAuthScreen,
+  onLogoClick,
   showShorts = true, 
   shortsLimit = 25,
   currentUserId = 'user_account',
@@ -88,7 +90,7 @@ export function HomeScreen({
   
   // Get data from API or fallback to mock
   const { isAuthenticated } = useAuth();
-  const { videos: apiVideos, shorts: apiShorts, isLoading } = useData();
+  const { videos: apiVideos, shorts: apiShorts, isLoading, isRefreshing } = useData();
   
   // Get all long videos and shorts
   // Use API data if authenticated, otherwise use mock data
@@ -112,9 +114,36 @@ export function HomeScreen({
 
   return (
     <div ref={containerRef} className="h-full overflow-y-auto scrollbar-hide bg-background">
+      {/* Refresh Indicator */}
+      <AnimatePresence>
+        {isRefreshing && (
+          <motion.div
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full shadow-lg"
+            style={{
+              background: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+            }}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <div className="flex items-center gap-2">
+              <motion.div
+                className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              />
+              <span className="text-white text-sm">Refreshing feed...</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between px-1 py-4 sticky top-0 bg-background/80 backdrop-blur-md z-20">
-        <h1 className="cursor-pointer" style={{ fontFamily: 'Garet, sans-serif', fontSize: '2rem' }} onClick={() => window.location.reload()}>dorphin</h1>
+        <h1 className="cursor-pointer" style={{ fontFamily: 'Garet, sans-serif', fontSize: '2rem' }} onClick={onLogoClick}>dorphin</h1>
         <div className="flex items-center gap-2">
           <motion.button
             onClick={onSearchClick}

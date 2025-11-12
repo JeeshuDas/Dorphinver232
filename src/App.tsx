@@ -11,8 +11,7 @@ import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
-import { AuthScreen } from './components/AuthScreen';
-import { Search, Mic, ArrowLeft, X, LogOut } from 'lucide-react';
+import { Search, Mic, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -34,7 +33,7 @@ interface NavigationStackEntry {
 
 function AppContent() {
   const { user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
-  const { refetchVideos, refetchShorts } = useData();
+  const { refreshAll, isRefreshing, searchVideos, clearSearch, searchResults, isSearching } = useData();
   
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const [navigationStack, setNavigationStack] = useState<NavigationStackEntry[]>([{ screen: 'home' }]);
@@ -139,13 +138,38 @@ function AppContent() {
     setSelectedVideoDetails(null);
   }, [saveScrollPosition]);
 
-  const navigateHome = useCallback(() => {
+  const navigateHome = useCallback(async () => {
+    // Prevent redundant refresh if already refreshing
+    if (isRefreshing) {
+      console.log('⏳ Already refreshing, skipping...');
+      return;
+    }
+
+    const wasOnHome = currentScreen === 'home';
+    
     saveScrollPosition();
     setNavigationStack([{ screen: 'home' }]);
     setSearchQuery('');
     // Close any open video details when navigating home
     setSelectedVideoDetails(null);
-  }, [saveScrollPosition]);
+    
+    // Refresh feed and scroll to top
+    console.log('🔄 Refreshing feed...');
+    await refreshAll();
+    
+    // Scroll to top after refresh
+    if (wasOnHome || !wasOnHome) {
+      setTimeout(() => {
+        const wrapper = screenContainerRefs.current['home'];
+        if (wrapper) {
+          const scrollable = wrapper.querySelector('[class*=\"overflow-y-auto\"], [class*=\"overflow-auto\"]') as HTMLElement;
+          if (scrollable) {
+            scrollable.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      }, 100);
+    }
+  }, [saveScrollPosition, refreshAll, isRefreshing, currentScreen]);
 
   const canGoBack = navigationStack.length > 1;
 
@@ -539,27 +563,15 @@ function AppContent() {
             {/* Right Icons - Profile Button */}
             {currentScreen !== 'profile' && currentScreen !== 'search' && (
               <div className="flex items-center gap-3">
-                {isAuthenticated ? (
-                  <motion.button
-                    className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
-                    onClick={() => navigateTo('profile')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  >
-                    {userAvatar}
-                  </motion.button>
-                ) : (
-                  <motion.button
-                    className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-ios"
-                    onClick={() => setShowAuthScreen(true)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  >
-                    Login
-                  </motion.button>
-                )}
+                <motion.button
+                  className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white shadow-ios text-sm"
+                  onClick={() => navigateTo('profile')}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                >
+                  {userAvatar}
+                </motion.button>
               </div>
             )}
           </motion.header>
@@ -594,6 +606,7 @@ function AppContent() {
                 onLeaderboardClick={() => navigateTo('leaderboard')}
                 onSearchClick={() => navigateTo('search')}
                 onShowAuthScreen={() => setShowAuthScreen(true)}
+                onLogoClick={navigateHome}
                 showShorts={showShorts}
                 shortsLimit={shortsLimit}
                 currentUserId="user_account"
@@ -801,13 +814,6 @@ function AppContent() {
         onFollowCreator={handleFollowCreator}
         currentUserId="user_account"
       />
-
-      {/* Auth Screen Modal */}
-      <AnimatePresence>
-        {showAuthScreen && (
-          <AuthScreen onClose={() => setShowAuthScreen(false)} />
-        )}
-      </AnimatePresence>
 
       {/* Toast Notifications */}
       <Toaster />

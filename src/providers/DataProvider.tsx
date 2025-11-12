@@ -8,9 +8,15 @@ interface DataContextType {
   videos: Video[];
   shorts: Video[];
   isLoading: boolean;
+  isRefreshing: boolean;
+  isSearching: boolean;
+  searchResults: Video[];
   error: string | null;
   refetchVideos: () => Promise<void>;
   refetchShorts: () => Promise<void>;
+  refreshAll: () => Promise<void>;
+  searchVideos: (query: string) => Promise<void>;
+  clearSearch: () => void;
   likeVideo: (videoId: string) => Promise<void>;
   followUser: (userId: string) => Promise<void>;
   isFollowing: (userId: string) => boolean;
@@ -36,12 +42,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const [videos, setVideos] = useState<Video[]>(mockVideos.filter(v => v.category === 'long'));
   const [shorts, setShorts] = useState<Video[]>(mockVideos.filter(v => v.category === 'short'));
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Video[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [followedUsers, setFollowedUsers] = useState<Set<string>>(new Set());
 
   // Fetch videos from backend
-  const fetchVideos = async () => {
-    setIsLoading(true);
+  const fetchVideos = async (showLoading: boolean = true) => {
+    if (showLoading) setIsLoading(true);
     setError(null);
     try {
       const data = await videoApi.getFeed('long', 50, 0);
@@ -57,13 +66,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       // Fallback to mock data on error
       setVideos(mockVideos.filter(v => v.category === 'long'));
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
   // Fetch shorts from backend
-  const fetchShorts = async () => {
-    setIsLoading(true);
+  const fetchShorts = async (showLoading: boolean = true) => {
+    if (showLoading) setIsLoading(true);
     setError(null);
     try {
       const data = await videoApi.getFeed('short', 50, 0);
@@ -79,8 +88,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       // Fallback to mock data on error
       setShorts(mockVideos.filter(v => v.category === 'short'));
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
+  };
+
+  // Refresh all data
+  const refreshAll = async () => {
+    setIsRefreshing(true);
+    await fetchVideos(false);
+    await fetchShorts(false);
+    setIsRefreshing(false);
   };
 
   // Initial data fetch
@@ -88,6 +105,36 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     fetchVideos();
     fetchShorts();
   }, []);
+
+  // Search videos
+  const searchVideos = async (query: string) => {
+    if (query.trim() === '') {
+      clearSearch();
+      return;
+    }
+
+    setIsSearching(true);
+    setError(null);
+    try {
+      const data = await videoApi.searchVideos(query);
+      if (data.videos && data.videos.length > 0) {
+        setSearchResults(data.videos);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (err: any) {
+      console.error('Error searching videos:', err);
+      setError(err.message);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Clear search results
+  const clearSearch = () => {
+    setSearchResults([]);
+  };
 
   // Like a video
   const likeVideo = async (videoId: string) => {
@@ -146,9 +193,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     videos,
     shorts,
     isLoading,
+    isRefreshing,
+    isSearching,
+    searchResults,
     error,
     refetchVideos: fetchVideos,
     refetchShorts: fetchShorts,
+    refreshAll,
+    searchVideos,
+    clearSearch,
     likeVideo,
     followUser,
     isFollowing,

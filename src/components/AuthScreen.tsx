@@ -4,6 +4,7 @@ import { X, Mail, Lock, User, Loader2, Chrome } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner@2.0.3';
 import logoImage from 'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png';
+import { healthCheck } from '../services/api';
 
 interface AuthScreenProps {
   onClose?: () => void;
@@ -18,6 +19,19 @@ export function AuthScreen({ onClose }: AuthScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const { login, signup, signInWithGoogle } = useAuth();
+
+  const handleTestConnection = async () => {
+    try {
+      console.log('🔍 Testing backend connection...');
+      toast.loading('Testing connection...');
+      const result = await healthCheck();
+      console.log('✅ Backend is reachable:', result);
+      toast.success('Backend connected! ✓');
+    } catch (error: any) {
+      console.error('❌ Backend connection failed:', error);
+      toast.error(`Backend connection failed: ${error.message}`);
+    }
+  };
 
   const handleDemoLogin = async () => {
     setEmail('demo@dorphin.app');
@@ -167,13 +181,23 @@ export function AuthScreen({ onClose }: AuthScreenProps) {
             <p className="text-sm text-blue-600 dark:text-blue-400 mb-3">
               💡 Try the demo account:
             </p>
-            <button
-              onClick={handleDemoLogin}
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
-            >
-              Use Demo Account
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDemoLogin}
+                disabled={isLoading}
+                className="flex-1 py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                Use Demo Account
+              </button>
+              <button
+                onClick={handleTestConnection}
+                disabled={isLoading}
+                className="px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+                title="Test backend connection"
+              >
+                Test
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground mt-2">
               demo@dorphin.app / demo123456
             </p>

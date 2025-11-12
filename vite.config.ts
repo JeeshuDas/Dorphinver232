@@ -17,6 +17,7 @@
         'next-themes@0.4.6': 'next-themes',
         'lucide-react@0.487.0': 'lucide-react',
         'input-otp@1.4.2': 'input-otp',
+        'hono@4': 'hono',
         'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png': path.resolve(__dirname, './src/assets/88f9fb54f06bdddc900357dfa9aed256720e2d56.png'),
         'embla-carousel-react@8.6.0': 'embla-carousel-react',
         'cmdk@1.1.1': 'cmdk',
