@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Video } from '../types';
-import { Settings, User, Upload as UploadIcon, Edit2, Check, X, Trash2, Camera, Link as LinkIcon } from 'lucide-react';
+import { Settings, User, Upload as UploadIcon, Edit2, Check, X, Trash2, Camera, Link as LinkIcon, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { userProfile } from '../data/mockData';
 import { Switch } from './ui/switch';
@@ -25,10 +25,6 @@ interface ProfileScreenProps {
   onDisplayNameChange?: (name: string) => void;
   userBio?: string;
   onBioChange?: (bio: string) => void;
-  showShorts?: boolean;
-  onShowShortsToggle?: (show: boolean) => void;
-  shortsLimit?: number;
-  onShortsLimitChange?: (limit: number) => void;
 }
 
 export function ProfileScreen({ 
@@ -43,15 +39,10 @@ export function ProfileScreen({
   userDisplayName: externalDisplayName,
   onDisplayNameChange,
   userBio: externalBio,
-  onBioChange,
-  showShorts = true,
-  onShowShortsToggle,
-  shortsLimit = 25,
-  onShortsLimitChange
+  onBioChange
 }: ProfileScreenProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<'longs' | 'shorts'>('longs');
   const [isEditing, setIsEditing] = useState(false);
   const [editedDisplayName, setEditedDisplayName] = useState('');
   const [editedBio, setEditedBio] = useState('');
@@ -63,10 +54,42 @@ export function ProfileScreen({
   const userDisplayName = externalDisplayName || userProfile.displayName;
   const userBio = externalBio || '';
 
-  // Filter videos based on active tab
-  const filteredVideos = userVideos.filter(video => 
-    activeTab === 'longs' ? video.category === 'long' : video.category === 'short'
-  );
+  // Show all user videos
+  const filteredVideos = userVideos;
+
+  // Calculate monthly score from user's videos (demo)
+  const monthlyScore = useMemo(() => {
+    // Get current month's videos
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    let totalScore = 0;
+    
+    for (const video of userVideos) {
+      // Check if video was uploaded this month (simplified - using mock data)
+      const watchTime = video.watchTime || 0;
+      const likes = video.likes || 0;
+      const views = typeof video.views === 'string' ? parseInt(video.views.replace(/,/g, '')) : (video.views || 0);
+      
+      // Calculate score using formula: 0.5*watchTime + 0.3*likes + 0.1*views
+      const videoScore = (0.5 * watchTime) + (0.3 * likes) + (0.1 * views);
+      totalScore += videoScore;
+    }
+    
+    return totalScore;
+  }, [userVideos]);
+
+  // Calculate average view count
+  const avgViews = useMemo(() => {
+    if (userVideos.length === 0) return 0;
+    
+    const totalViews = userVideos.reduce((sum, video) => {
+      const views = typeof video.views === 'string' ? parseInt(video.views.replace(/,/g, '')) : (video.views || 0);
+      return sum + views;
+    }, 0);
+    
+    return totalViews / userVideos.length;
+  }, [userVideos]);
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -134,25 +157,78 @@ export function ProfileScreen({
     <div className="h-full overflow-y-auto scrollbar-hide bg-background">
       {/* Header Section */}
       <div className="p-4">
-        <div className="flex items-start gap-3 mb-4">
-          {/* Profile Avatar */}
-          <div className="relative shrink-0">
-            <div 
-              className="w-[72px] h-[72px] rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center text-white shadow-ios overflow-hidden"
-            >
-              {isImageUrl(userAvatar) ? (
-                <ImageWithFallback
-                  src={userAvatar}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-2xl">{userAvatar}</span>
-              )}
+        {!isEditing && (
+          <div className="flex items-center gap-4 mb-4">
+            {/* Profile Avatar */}
+            <div className="relative shrink-0">
+              <div 
+                className="w-20 h-20 rounded-xl bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center text-white shadow-ios overflow-hidden"
+              >
+                {isImageUrl(userAvatar) ? (
+                  <ImageWithFallback
+                    src={userAvatar}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl">{userAvatar}</span>
+                )}
+              </div>
             </div>
-            
-            {/* Edit Avatar Button - shown when editing */}
-            {isEditing && (
+
+            {/* Name and Username */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl truncate">{userDisplayName}</h2>
+              <p className="text-sm text-muted-foreground">@{userDisplayName.toLowerCase().replace(/\s+/g, '')}</p>
+            </div>
+
+            {/* Action Buttons */}
+            <motion.button
+              onClick={handleStartEdit}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors shrink-0"
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <Edit2 className="w-4.5 h-4.5 text-foreground" />
+            </motion.button>
+            <motion.button
+              onClick={() => setShowUploadDialog(true)}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors shrink-0"
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <UploadIcon className="w-5 h-5 text-foreground" />
+            </motion.button>
+            <motion.button
+              onClick={() => setShowSettings(true)}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors shrink-0"
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <Settings className="w-6 h-6 text-foreground" />
+            </motion.button>
+          </div>
+        )}
+
+        {isEditing && (
+          <div className="flex items-start gap-3 mb-4">
+            {/* Profile Avatar */}
+            <div className="relative shrink-0">
+              <div 
+                className="w-[72px] h-[72px] rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center text-white shadow-ios overflow-hidden"
+              >
+                {isImageUrl(userAvatar) ? (
+                  <ImageWithFallback
+                    src={userAvatar}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl">{userAvatar}</span>
+                )}
+              </div>
+              
+              {/* Edit Avatar Button - shown when editing */}
               <motion.button
                 onClick={() => setShowAvatarDialog(true)}
                 className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-ios hover:scale-105 transition-transform"
@@ -163,12 +239,10 @@ export function ProfileScreen({
               >
                 <Camera className="w-4 h-4" />
               </motion.button>
-            )}
-          </div>
+            </div>
 
-          {/* Profile Info */}
-          <div className="flex-1 min-w-0">
-            {isEditing ? (
+            {/* Profile Info */}
+            <div className="flex-1 min-w-0">
               <div className="space-y-2">
                 <Input
                   value={editedDisplayName}
@@ -183,113 +257,76 @@ export function ProfileScreen({
                   className="min-h-[60px] max-h-[80px] text-sm resize-none"
                 />
               </div>
-            ) : (
-              <>
-                <h2 className="text-foreground mb-1 truncate">{userDisplayName}</h2>
-                {userBio && (
-                  <p className="text-sm text-muted-foreground mb-1 line-clamp-2">{userBio}</p>
-                )}
-                {/* Follower Count */}
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <User className="w-4 h-4" />
-                  <span className="text-sm">{formatNumber(userProfile.followers)}</span>
-                </div>
-              </>
-            )}
+            </div>
+
+            {/* Edit/Save/Cancel Buttons */}
+            <motion.button
+              onClick={handleSaveEdit}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <Check className="w-5 h-5 text-green-500" />
+            </motion.button>
+            <motion.button
+              onClick={handleCancelEdit}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <X className="w-5 h-5 text-red-500" />
+            </motion.button>
           </div>
+        )}
 
-          {/* Edit/Save/Cancel Buttons */}
-          {isEditing ? (
-            <>
-              <motion.button
-                onClick={handleSaveEdit}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <Check className="w-5 h-5 text-green-500" />
-              </motion.button>
-              <motion.button
-                onClick={handleCancelEdit}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <X className="w-5 h-5 text-red-500" />
-              </motion.button>
-            </>
-          ) : (
-            <>
-              <motion.button
-                onClick={handleStartEdit}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <Edit2 className="w-4.5 h-4.5 text-foreground" />
-              </motion.button>
-              <motion.button
-                onClick={() => setShowUploadDialog(true)}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <UploadIcon className="w-5 h-5 text-foreground" />
-              </motion.button>
-              <motion.button
-                onClick={() => setShowSettings(true)}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <Settings className="w-6 h-6 text-foreground" />
-              </motion.button>
-            </>
-          )}
-        </div>
+        {/* Bio and Stats - only shown when not editing */}
+        {!isEditing && (
+          <div>
+            {userBio && (
+              <p className="mb-5 text-muted-foreground">{userBio}</p>
+            )}
+            
+            {/* Stats: Follower Count, Score & Avg Views */}
+            <div 
+              className="grid grid-cols-3 gap-4 py-4 rounded-xl"
+              style={{
+                background: 'rgba(0, 0, 0, 0.2)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              <div className="flex flex-col items-center gap-1 relative">
+                <User className="w-5 h-5 text-muted-foreground" />
+                <span className="text-2xl">{formatNumber(userProfile.followers)}</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Followers</span>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+              </div>
+              
+              <div className="flex flex-col items-center gap-1 relative">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <span className="text-2xl">{formatNumber(monthlyScore)}</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Score</span>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+              </div>
+              
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <span className="text-lg">👁️</span>
+                </div>
+                <span className="text-2xl">{formatNumber(avgViews)}</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Avg Views</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Tab Selector */}
-      <div className="px-4 pb-3">
-        <div className="relative bg-muted rounded-xl p-1 flex gap-1">
-          {/* Sliding Background */}
-          <motion.div
-            className="absolute top-1 bottom-1 bg-background rounded-lg shadow-ios-sm"
-            initial={false}
-            animate={{
-              left: activeTab === 'longs' ? '4px' : '50%',
-              right: activeTab === 'longs' ? '50%' : '4px',
-            }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          />
-
-          {/* Longs Tab */}
-          <button
-            onClick={() => setActiveTab('longs')}
-            className="relative z-10 flex-1 py-2 px-4 rounded-lg text-sm transition-colors"
-          >
-            <span className={activeTab === 'longs' ? 'text-foreground' : 'text-muted-foreground'}>
-              Longs
-            </span>
-          </button>
-
-          {/* Shorts Tab */}
-          <button
-            onClick={() => setActiveTab('shorts')}
-            className="relative z-10 flex-1 py-2 px-4 rounded-lg text-sm transition-colors"
-          >
-            <span className={activeTab === 'shorts' ? 'text-foreground' : 'text-muted-foreground'}>
-              Shorts
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Videos Grid - 2 columns for longs, 3 for shorts */}
+      {/* Videos Grid */}
       <div className="px-2">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab}
+            key="videos"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -300,13 +337,11 @@ export function ProfileScreen({
               mass: 0.8
             }}
           >
-            <div className={`grid ${activeTab === 'longs' ? 'grid-cols-2' : 'grid-cols-3'} gap-[3px]`}>
+            <div className="grid grid-cols-2 gap-[3px]">
               {filteredVideos.map((video, index) => (
                 <motion.div
                   key={video.id}
-                  className={`relative overflow-hidden cursor-pointer group ${
-                    activeTab === 'longs' ? 'aspect-square' : 'aspect-[9/16]'
-                  }`}
+                  className="relative overflow-hidden cursor-pointer group aspect-square"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ 
@@ -361,8 +396,8 @@ export function ProfileScreen({
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.2 }}
               >
-                <p>No {activeTab} yet</p>
-                <p className="text-sm mt-2">Tap Upload to add your first {activeTab === 'longs' ? 'long video' : 'short'}</p>
+                <p>No videos yet</p>
+                <p className="text-sm mt-2">Tap Upload to add your first video</p>
               </motion.div>
             )}
           </motion.div>
@@ -407,44 +442,6 @@ export function ProfileScreen({
                   </div>
                   <Switch checked={isDarkMode} onCheckedChange={onThemeToggle} />
                 </div>
-
-                {/* Show/Hide Shorts */}
-                {onShowShortsToggle && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-foreground">Show Shorts</Label>
-                      <p className="text-xs text-muted-foreground">Display shorts in feed</p>
-                    </div>
-                    <Switch 
-                      checked={showShorts} 
-                      onCheckedChange={onShowShortsToggle} 
-                    />
-                  </div>
-                )}
-
-                {/* Shorts Limit Slider */}
-                {onShortsLimitChange && showShorts && (
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-foreground">Shorts Scroll Limit</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Maximum shorts per row: {shortsLimit}
-                      </p>
-                    </div>
-                    <Slider
-                      value={[shortsLimit]}
-                      onValueChange={(value) => onShortsLimitChange(value[0])}
-                      min={5}
-                      max={25}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>5</span>
-                      <span>25</span>
-                    </div>
-                  </div>
-                )}
 
                 {/* Additional Settings Placeholder */}
                 <div className="pt-4 border-t border-border">

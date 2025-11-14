@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Video } from '../types';
+import { Video, Comment } from '../types';
 import { Smile, MessageCircle, Send, Menu, X, Heart, Share2, Play, Pause, Link, Download, Facebook, Instagram, Twitter, Check } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { motion, AnimatePresence } from 'motion/react';
@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { SmileyIcon } from './SmileyIcon';
 import { copyToClipboard } from '../utils/clipboard';
+import { CommentThread } from './CommentThread';
 
 interface FullScreenVideoPlayerProps {
   video: Video;
@@ -18,8 +19,8 @@ interface FullScreenVideoPlayerProps {
   followedCreators?: Set<string>;
   onFollowCreator?: (creatorId: string) => void;
   currentUserId?: string;
-  comments?: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
-  onAddComment?: (text: string) => void;
+  comments?: Comment[];
+  onAddComment?: (text: string, parentId?: string) => void;
   hasReacted?: boolean;
   onReact?: () => void;
 }
@@ -241,7 +242,7 @@ export function FullScreenVideoPlayer({
 
   return (
     <motion.div
-      className="fixed inset-0 bg-black z-50 overflow-hidden"
+      className="fixed inset-0 bg-black z-50 overflow-hidden flex items-center justify-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -250,24 +251,45 @@ export function FullScreenVideoPlayer({
       onMouseMove={handleInteraction}
       onTouchStart={handleInteraction}
     >
-      {/* Video Content */}
-      {video.videoUrl ? (
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-contain"
-          src={video.videoUrl}
-          loop
-          playsInline
-          controls={false}
-        />
-      ) : (
-        <div 
-          className="absolute inset-0 flex items-center justify-center" 
-          style={{ backgroundColor: video.thumbnail }}
-        >
-          <div className="text-white/30 text-9xl">▶</div>
-        </div>
-      )}
+      {/* Square Video Container */}
+      <div className="relative w-full max-w-[600px] aspect-square">
+        {/* Blurred Background for Fit Mode */}
+        {video.frameSettings?.mode === 'fit' && video.videoUrl && (
+          <div 
+            className="absolute inset-0 w-full h-full blur-3xl scale-110 opacity-40"
+            style={{
+              backgroundImage: `url(${video.thumbnail || ''})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          />
+        )}
+
+        {/* Video Content */}
+        {video.videoUrl ? (
+          <video
+            ref={videoRef}
+            className="absolute inset-0 w-full h-full"
+            src={video.videoUrl}
+            loop
+            playsInline
+            controls={false}
+            style={{
+              objectFit: video.frameSettings?.mode === 'fit' ? 'contain' : 'cover',
+              transform: video.frameSettings?.mode === 'fill' 
+                ? `scale(${video.frameSettings.zoom || 1}) translate(${(video.frameSettings.positionX || 0) / (video.frameSettings.zoom || 1)}px, ${(video.frameSettings.positionY || 0) / (video.frameSettings.zoom || 1)}px)`
+                : `scale(${video.frameSettings?.zoom || 1})`,
+            }}
+          />
+        ) : (
+          <div 
+            className="absolute inset-0 flex items-center justify-center" 
+            style={{ backgroundColor: video.thumbnail }}
+          >
+            <div className="text-white/30 text-9xl">▶</div>
+          </div>
+        )}
+      </div>
 
       {/* Close Button - Top Left - Always visible */}
       <div className="absolute top-6 left-6 z-50 pointer-events-auto">
@@ -592,16 +614,46 @@ function CommentsOverlay({
 }: { 
   video: Video; 
   formatNumber: (num: number) => string;
-  comments: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
-  onAddComment?: (text: string) => void;
+  comments: Comment[];
+  onAddComment?: (text: string, parentId?: string) => void;
 }) {
   const [newComment, setNewComment] = useState('');
   
-  // Mock comments data for empty state
-  const mockComments = [
-    { id: '1', user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', time: '2h' },
-    { id: '2', user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', time: '5h' },
-    { id: '3', user: 'Mike Johnson', avatar: '#10B981', text: 'Can\'t stop watching', time: '1d' },
+  // Mock nested comments for empty state
+  const mockComments: Comment[] = [
+    { 
+      id: '1', 
+      videoId: video.id,
+      userId: 'user1',
+      user: 'Alex Chen', 
+      avatar: '#8B5CF6', 
+      text: 'This is amazing! 🔥', 
+      time: '2h',
+      createdAt: new Date().toISOString(),
+      replies: [
+        {
+          id: '1-1',
+          videoId: video.id,
+          userId: 'user2',
+          user: 'Sarah Kim',
+          avatar: '#EC4899',
+          text: 'I totally agree!',
+          time: '1h',
+          createdAt: new Date().toISOString(),
+          parentId: '1'
+        }
+      ]
+    },
+    { 
+      id: '2', 
+      videoId: video.id,
+      userId: 'user3',
+      user: 'Mike Johnson', 
+      avatar: '#10B981', 
+      text: 'Can\'t stop watching', 
+      time: '1d',
+      createdAt: new Date().toISOString(),
+    },
   ];
 
   const displayComments = comments.length > 0 ? comments : mockComments;
@@ -611,6 +663,12 @@ function CommentsOverlay({
     if (newComment.trim() && onAddComment) {
       onAddComment(newComment.trim());
       setNewComment('');
+    }
+  };
+
+  const handleReply = (parentId: string, text: string) => {
+    if (onAddComment) {
+      onAddComment(text, parentId);
     }
   };
 
@@ -636,22 +694,14 @@ function CommentsOverlay({
           Comments ({displayComments.length})
         </h3>
 
-        {/* Comments List */}
-        <div className="space-y-2.5 mb-3 overflow-y-auto flex-1 scrollbar-hide">
+        {/* Comments List with nested threads */}
+        <div className="space-y-3 mb-3 overflow-y-auto flex-1 scrollbar-hide">
           {displayComments.map((comment) => (
-            <div key={comment.id} className="flex gap-2">
-              <div 
-                className="w-7 h-7 rounded-full shrink-0"
-                style={{ backgroundColor: comment.avatar }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-white text-xs truncate">{comment.user}</p>
-                  <span className="text-white/40 text-[10px]">{comment.time}</span>
-                </div>
-                <p className="text-white/70 text-xs leading-relaxed">{comment.text}</p>
-              </div>
-            </div>
+            <CommentThread
+              key={comment.id}
+              comment={comment}
+              onReply={handleReply}
+            />
           ))}
         </div>
 

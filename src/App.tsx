@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Video } from './types';
-import { localBackendApi } from './services/localBackendApi';
-import { videoApi, userApi, commentApi } from './services/api';
+import { Video, Comment } from './types';
 import { HomeScreen } from './components/HomeScreen';
-import { ShortsScreen } from './components/ShortsScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { SearchScreen } from './components/SearchScreen';
 import { CreatorProfileScreen } from './components/CreatorProfileScreen';
@@ -11,7 +8,6 @@ import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { MiniPlayer } from './components/MiniPlayer';
 import { FullScreenVideoPlayer } from './components/FullScreenVideoPlayer';
 import { VideoDetailsDialog } from './components/VideoDetailsDialog';
-import { BackendStatusBanner } from './components/BackendStatusBanner';
 import { Search, Mic, ArrowLeft, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from './components/ui/sonner';
@@ -19,15 +15,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider, useData } from './providers/DataProvider';
 import logoImage from 'figma:asset/88f9fb54f06bdddc900357dfa9aed256720e2d56.png';
 
-type Screen = 'home' | 'shorts' | 'search' | 'profile' | 'video' | 'creator' | 'leaderboard';
+type Screen = 'home' | 'search' | 'profile' | 'video' | 'creator' | 'leaderboard';
 
 interface NavigationStackEntry {
   screen: Screen;
   data?: {
     creatorId?: string;
     video?: Video;
-    shortsCategoryId?: string;
-    shortsStartIndex?: number;
   };
   scrollPosition?: number;
 }
@@ -52,10 +46,17 @@ function AppContent() {
   const [userDisplayName, setUserDisplayName] = useState(user?.displayName || 'Your Profile');
   const [userBio, setUserBio] = useState(user?.bio || '');
   const [followedCreators, setFollowedCreators] = useState<Set<string>>(new Set(['animezone', 'musicworld', 'comedyclub', 'gamerpro', 'foodiechannel', 'djmaster', 'viralcontent']));
-  const [showShorts, setShowShorts] = useState(true);
-  const [shortsLimit, setShortsLimit] = useState(7);
-  const [videoComments, setVideoComments] = useState<Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>>({});
+  const [videoComments, setVideoComments] = useState<Record<string, Array<Comment>>>({});
   const [reactedVideos, setReactedVideos] = useState<Set<string>>(new Set());
+  const [watchHistory, setWatchHistory] = useState<Array<{ videoId: string; timestamp: number; lastWatchedAt: Date }>>([
+    // Demo watch history data
+    { videoId: '1', timestamp: 300, lastWatchedAt: new Date('2025-11-14T10:30:00') },
+    { videoId: '3', timestamp: 1200, lastWatchedAt: new Date('2025-11-14T09:15:00') },
+    { videoId: '5', timestamp: 450, lastWatchedAt: new Date('2025-11-13T16:20:00') },
+    { videoId: '9', timestamp: 600, lastWatchedAt: new Date('2025-11-13T14:45:00') },
+    { videoId: '2', timestamp: 800, lastWatchedAt: new Date('2025-11-12T11:30:00') },
+    { videoId: '4', timestamp: 1000, lastWatchedAt: new Date('2025-11-12T08:00:00') },
+  ]);
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout>();
   const screenContainerRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -66,20 +67,8 @@ function AppContent() {
       setUserDisplayName(user.displayName || user.username || 'User');
       setUserBio(user.bio || '');
       
-      // Fetch user's videos from backend
-      const fetchUserVideos = async () => {
-        try {
-          console.log('🎬 Fetching user videos from backend...', user.id);
-          const videos = await userApi.getUserVideos(user.id);
-          console.log('✅ User videos loaded:', videos.length);
-          setUserVideos(videos || []);
-        } catch (error) {
-          console.error('❌ Error fetching user videos:', error);
-          setUserVideos([]);
-        }
-      };
-      
-      fetchUserVideos();
+      // No backend - just use empty user videos
+      setUserVideos([]);
     } else {
       // Clear user videos when logged out
       setUserVideos([]);
@@ -225,8 +214,8 @@ function AppContent() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && canGoBack) {
-        // Don't navigate back if we're in fullscreen video or shorts
-        if (currentScreen !== 'video' && currentScreen !== 'shorts') {
+        // Don't navigate back if we're in fullscreen video
+        if (currentScreen !== 'video') {
           navigateBack();
         }
       }
@@ -262,97 +251,24 @@ function AppContent() {
 
   const handleExpandMiniPlayer = () => {
     if (miniPlayerVideo) {
-      if (miniPlayerVideo.category === 'short') {
-        // Find the index for the short video
-        import('./data/mockData').then(({ shortsVideos }) => {
-          const userShorts = userVideos.filter(v => v.category === 'short');
-          const userIndex = userShorts.findIndex(v => v.id === miniPlayerVideo.id);
-          
-          let startIndex = 0;
-          if (userIndex >= 0) {
-            startIndex = userIndex;
-          } else {
-            const mockIndex = shortsVideos.findIndex(v => v.id === miniPlayerVideo.id);
-            startIndex = mockIndex >= 0 ? userShorts.length + mockIndex : 0;
-          }
-          
-          navigateTo('shorts', { shortsStartIndex: startIndex });
-        });
-      } else {
-        navigateTo('video', { video: miniPlayerVideo });
-      }
+      navigateTo('video', { video: miniPlayerVideo });
       setMiniPlayerVideo(null);
     }
   };
 
   const handleVideoClick = (video: Video) => {
-    if (video.category === 'long') {
-      navigateTo('video', { video });
-    } else if (video.category === 'short') {
-      // Find the index of this short in the shorts list
-      import('./data/mockData').then(({ shortsVideos }) => {
-        // First check user videos for shorts
-        const userShorts = userVideos.filter(v => v.category === 'short');
-        const userIndex = userShorts.findIndex(v => v.id === video.id);
-        
-        let startIndex = 0;
-        if (userIndex >= 0) {
-          // Found in user videos
-          startIndex = userIndex;
-        } else {
-          // Check mock shorts
-          const mockIndex = shortsVideos.findIndex(v => v.id === video.id);
-          startIndex = mockIndex >= 0 ? userShorts.length + mockIndex : 0;
-        }
-        
-        navigateTo('shorts', { shortsStartIndex: startIndex });
-      });
-    }
-  };
-
-  const handleShortClick = (categoryId: string, startIndex: number) => {
-    navigateTo('shorts', { shortsCategoryId: categoryId, shortsStartIndex: startIndex });
+    navigateTo('video', { video });
   };
 
   const handleUploadVideo = async (video: Video, videoFile?: File, thumbnailFile?: File): Promise<void> => {
-    // Upload to local backend if video file is provided
-    if (videoFile) {
-      console.log('🎬 [APP] Starting video upload to local backend...', video.title);
-      
-      try {
-        // Upload to local backend
-        const uploadedVideo = await localBackendApi.uploadVideo(
-          videoFile,
-          {
-            title: video.title,
-            description: video.description || '',
-            category: video.category as 'short' | 'long',
-            shortCategory: video.shortCategory,
-            duration: video.duration || 0,
-          }
-        );
-        
-        console.log('✅ [APP] Video uploaded successfully:', uploadedVideo);
-        
-        // Add to user videos
-        setUserVideos([uploadedVideo, ...userVideos]);
-        
-        // Save to localStorage
-        localBackendApi.saveToLocalStorage();
-        
-        const { toast } = await import('sonner@2.0.3');
-        toast.success('Video uploaded successfully to local storage!');
-      } catch (error) {
-        console.error('❌ [APP] Video upload failed:', error);
-        const { toast } = await import('sonner@2.0.3');
-        toast.error(error instanceof Error ? error.message : 'Failed to upload video');
-        
-        throw error; // Re-throw so the upload dialog knows it failed
-      }
-    } else {
-      // If no video file, just add the video object (for backward compatibility)
-      setUserVideos([video, ...userVideos]);
-    }
+    // Mock upload - just add video to local state
+    console.log('🎬 [APP] Mock upload (no backend):', video.title);
+    
+    // If no video file, just add the video object
+    setUserVideos([video, ...userVideos]);
+    
+    const { toast } = await import('sonner@2.0.3');
+    toast.success('Video added (mock - no backend)');
   };
 
   const handleDeleteVideo = (videoId: string) => {
@@ -377,17 +293,11 @@ function AppContent() {
     if (!miniPlayerVideo) return;
     
     // Import mockVideos to get next video
-    import('./data/mockData').then(({ mockVideos, shortsVideos }) => {
-      if (miniPlayerVideo.category === 'short') {
-        const currentIndex = shortsVideos.findIndex(v => v.id === miniPlayerVideo.id);
-        const nextVideo = shortsVideos[(currentIndex + 1) % shortsVideos.length];
-        setMiniPlayerVideo(nextVideo);
-      } else {
-        const longVideos = mockVideos.filter(v => v.category === 'long');
-        const currentIndex = longVideos.findIndex(v => v.id === miniPlayerVideo.id);
-        const nextVideo = longVideos[(currentIndex + 1) % longVideos.length];
-        setMiniPlayerVideo(nextVideo);
-      }
+    import('./data/mockData').then(({ mockVideos }) => {
+      const longVideos = mockVideos.filter(v => v.category === 'long');
+      const currentIndex = longVideos.findIndex(v => v.id === miniPlayerVideo.id);
+      const nextVideo = longVideos[(currentIndex + 1) % longVideos.length];
+      setMiniPlayerVideo(nextVideo);
     });
   }, [miniPlayerVideo]);
 
@@ -406,21 +316,55 @@ function AppContent() {
     // Follow is already toggled via optimistic update
   };
 
-  const handleAddComment = useCallback(async (videoId: string, text: string) => {
+  const handleAddComment = useCallback(async (videoId: string, text: string, parentId?: string) => {
     const tempId = Date.now().toString();
-    const newComment = {
+    const newComment: Comment = {
       id: tempId,
+      videoId,
+      userId: user?.id || 'user_account',
       user: userDisplayName,
       avatar: user?.avatar || '#FF6B9D',
       text,
-      time: 'just now'
+      time: 'just now',
+      createdAt: new Date().toISOString(),
+      parentId,
     };
     
     // Optimistic update
-    setVideoComments(prev => ({
-      ...prev,
-      [videoId]: [newComment, ...(prev[videoId] || [])]
-    }));
+    setVideoComments(prev => {
+      const existingComments = prev[videoId] || [];
+      
+      if (parentId) {
+        // If it's a reply, add it to the parent's replies array
+        const addReplyToComment = (comments: Comment[]): Comment[] => {
+          return comments.map(comment => {
+            if (comment.id === parentId) {
+              return {
+                ...comment,
+                replies: [newComment, ...(comment.replies || [])]
+              };
+            } else if (comment.replies && comment.replies.length > 0) {
+              return {
+                ...comment,
+                replies: addReplyToComment(comment.replies)
+              };
+            }
+            return comment;
+          });
+        };
+        
+        return {
+          ...prev,
+          [videoId]: addReplyToComment(existingComments)
+        };
+      } else {
+        // If it's a top-level comment, add to the beginning
+        return {
+          ...prev,
+          [videoId]: [newComment, ...existingComments]
+        };
+      }
+    });
   }, [userDisplayName, user]);
 
   const handleReactToVideo = useCallback(async (videoId: string) => {
@@ -438,9 +382,6 @@ function AppContent() {
 
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden flex flex-col">
-      {/* Backend Status Banner */}
-      <BackendStatusBanner isConnected={isBackendConnected} />
-      
       {/* Navigation Stack Depth Indicator (Development) */}
       {process.env.NODE_ENV === 'development' && navigationStack.length > 1 && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
@@ -452,7 +393,7 @@ function AppContent() {
       
       {/* Header */}
       <AnimatePresence>
-        {currentScreen !== 'shorts' && currentScreen !== 'video' && currentScreen !== 'creator' && currentScreen !== 'home' && currentScreen !== 'leaderboard' && (
+        {currentScreen !== 'video' && currentScreen !== 'creator' && currentScreen !== 'home' && currentScreen !== 'leaderboard' && (
           <motion.header 
             className="shrink-0 flex items-center justify-between px-4 py-3 backdrop-blur-ios bg-background/80 z-20"
             initial={{ y: -20, opacity: 0 }}
@@ -601,7 +542,6 @@ function AppContent() {
             >
               <HomeScreen 
                 onVideoClick={handleVideoClick}
-                onShortClick={handleShortClick}
                 onCreatorClick={handleCreatorClick}
                 followedCreators={followedCreators}
                 onFollowCreator={handleFollowCreator}
@@ -610,8 +550,6 @@ function AppContent() {
                 onSearchClick={() => navigateTo('search')}
                 onShowAuthScreen={() => setShowAuthScreen(true)}
                 onLogoClick={navigateHome}
-                showShorts={showShorts}
-                shortsLimit={shortsLimit}
                 currentUserId="user_account"
                 reactedVideos={reactedVideos}
                 onReact={handleReactToVideo}
@@ -619,39 +557,7 @@ function AppContent() {
                 onAddComment={handleAddComment}
                 userAvatar={userAvatar}
                 userVideos={userVideos}
-              />
-            </motion.div>
-          )}
-
-          {currentScreen === 'shorts' && (
-            <motion.div
-              key={`shorts-${currentData?.shortsStartIndex || 0}`}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ 
-                type: "spring", 
-                stiffness: 300, 
-                damping: 30,
-                opacity: { duration: 0.2 }
-              }}
-              className="h-full bg-background"
-            >
-              <ShortsScreen 
-                key={`shorts-screen-${currentData?.shortsStartIndex || 0}`}
-                onCollapse={handleCollapseVideo}
-                onMenuClick={setSelectedVideoDetails}
-                onClose={navigateBack}
-                categoryId={currentData?.shortsCategoryId}
-                startIndex={currentData?.shortsStartIndex || 0}
-                followedCreators={followedCreators}
-                onFollowCreator={handleFollowCreator}
-                userVideos={userVideos}
-                currentUserId="user_account"
-                reactedVideos={reactedVideos}
-                onReact={handleReactToVideo}
-                comments={videoComments}
-                onAddComment={handleAddComment}
+                watchHistory={watchHistory}
               />
             </motion.div>
           )}
@@ -680,7 +586,7 @@ function AppContent() {
                 onFollowCreator={handleFollowCreator}
                 currentUserId="user_account"
                 comments={videoComments[currentData.video.id] || []}
-                onAddComment={(text) => handleAddComment(currentData.video.id, text)}
+                onAddComment={(text, parentId) => handleAddComment(currentData.video.id, text, parentId)}
                 hasReacted={reactedVideos.has(currentData.video.id)}
                 onReact={() => handleReactToVideo(currentData.video.id)}
               />
@@ -738,10 +644,6 @@ function AppContent() {
                 onDisplayNameChange={setUserDisplayName}
                 userBio={userBio}
                 onBioChange={setUserBio}
-                showShorts={showShorts}
-                onShowShortsToggle={setShowShorts}
-                shortsLimit={shortsLimit}
-                onShortsLimitChange={setShortsLimit}
               />
             </motion.div>
           )}
@@ -789,6 +691,7 @@ function AppContent() {
               <LeaderboardScreen
                 onBack={navigateBack}
                 onCreatorClick={handleCreatorClick}
+                onVideoClick={handleVideoClick}
               />
             </motion.div>
           )}
@@ -797,7 +700,7 @@ function AppContent() {
 
       {/* Mini Player */}
       <AnimatePresence>
-        {miniPlayerVideo && currentScreen !== 'shorts' && currentScreen !== 'video' && (
+        {miniPlayerVideo && currentScreen !== 'video' && (
           <MiniPlayer
             video={miniPlayerVideo}
             initialTime={videoProgress[miniPlayerVideo.id] || 0}

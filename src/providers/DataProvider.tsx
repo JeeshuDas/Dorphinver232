@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Video } from '../types';
 import { mockVideos } from '../data/mockData';
-import { localBackendApi } from '../services/localBackendApi';
 import { useAuth } from '../contexts/AuthContext';
-import { logBackendInstructions, logBackendConnected } from '../utils/consoleHelper';
 
 interface DataContextType {
   videos: Video[];
@@ -49,101 +47,54 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const [searchResults, setSearchResults] = useState<Video[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [followedUsers, setFollowedUsers] = useState<Set<string>>(new Set());
-  const [backendInitialized, setBackendInitialized] = useState(false);
 
-  // Initialize local backend on mount
+  // Initialize with mock data on mount
   useEffect(() => {
-    const initBackend = async () => {
-      try {
-        console.log('🚀 Initializing local backend connection...');
-        await localBackendApi.initialize();
-        setBackendInitialized(true);
-        console.log('✅ Local backend initialized successfully');
-        logBackendConnected();
-        
-        // Fetch initial data
-        await fetchVideos();
-        await fetchShorts();
-      } catch (err: any) {
-        console.error('❌ Failed to initialize local backend:', err);
-        logBackendInstructions();
-        // Fallback to mock data
-        setVideos(mockVideos.filter(v => v.category === 'long'));
-        setShorts(mockVideos.filter(v => v.category === 'short'));
-        setBackendInitialized(false);
-      }
-    };
-    
-    initBackend();
+    console.log('🎭 Using mock data only (no backend)');
+    console.log('✅ Loaded mock videos');
+    setVideos(mockVideos.filter(v => v.category === 'long'));
+    setShorts(mockVideos.filter(v => v.category === 'short'));
   }, []);
 
-  // Fetch videos from local backend
-  const fetchVideos = async (showLoading: boolean = true) => {
-    if (showLoading) setIsLoading(true);
-    setError(null);
+  // Fetch videos (mock - just return existing data)
+  const fetchVideos = async () => {
+    setIsLoading(true);
     try {
-      const allVideos = await localBackendApi.getVideosByCategory('long');
-      console.log('📹 [DataProvider] Fetched', allVideos.length, 'long videos');
-      
-      if (allVideos.length > 0) {
-        setVideos(allVideos);
-      } else {
-        // Fallback to mock data if no backend videos
-        console.log('ℹ️ No videos in backend, using mock data');
-        setVideos(mockVideos.filter(v => v.category === 'long'));
-      }
-    } catch (err: any) {
-      console.error('❌ Error fetching videos:', err);
-      setError(err.message);
-      // Fallback to mock data on error
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate loading
       setVideos(mockVideos.filter(v => v.category === 'long'));
+      setError(null);
+    } catch (err: any) {
+      console.error('Error loading videos:', err);
+      setError(err.message);
     } finally {
-      if (showLoading) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
-  // Fetch shorts from local backend
-  const fetchShorts = async (showLoading: boolean = true) => {
-    if (showLoading) setIsLoading(true);
-    setError(null);
+  // Fetch shorts (mock - just return existing data)
+  const fetchShorts = async () => {
+    setIsLoading(true);
     try {
-      const allShorts = await localBackendApi.getVideosByCategory('short');
-      console.log('📱 [DataProvider] Fetched', allShorts.length, 'shorts');
-      
-      if (allShorts.length > 0) {
-        setShorts(allShorts);
-      } else {
-        // Fallback to mock data if no backend shorts
-        console.log('ℹ️ No shorts in backend, using mock data');
-        setShorts(mockVideos.filter(v => v.category === 'short'));
-      }
-    } catch (err: any) {
-      console.error('❌ Error fetching shorts:', err);
-      setError(err.message);
-      // Fallback to mock data on error
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate loading
       setShorts(mockVideos.filter(v => v.category === 'short'));
+      setError(null);
+    } catch (err: any) {
+      console.error('Error loading shorts:', err);
+      setError(err.message);
     } finally {
-      if (showLoading) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
   // Refresh all data
   const refreshAll = async () => {
     setIsRefreshing(true);
-    
-    // Re-sync with backend
-    try {
-      await localBackendApi.syncWithBackend();
-    } catch (err) {
-      console.error('❌ Failed to sync with backend:', err);
-    }
-    
-    await fetchVideos(false);
-    await fetchShorts(false);
+    await fetchVideos();
+    await fetchShorts();
     setIsRefreshing(false);
   };
 
-  // Search videos
+  // Search videos (mock - search in mock data)
   const searchVideos = async (query: string) => {
     if (query.trim() === '') {
       clearSearch();
@@ -153,7 +104,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     setIsSearching(true);
     setError(null);
     try {
-      const results = await localBackendApi.searchVideos(query);
+      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate loading
+      
+      const lowerQuery = query.toLowerCase();
+      const results = mockVideos.filter(video => 
+        video.title.toLowerCase().includes(lowerQuery) ||
+        video.description?.toLowerCase().includes(lowerQuery) ||
+        video.creator.toLowerCase().includes(lowerQuery)
+      );
+      
       console.log('🔍 [DataProvider] Search results:', results.length, 'videos');
       setSearchResults(results);
     } catch (err: any) {
@@ -170,21 +129,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     setSearchResults([]);
   };
 
-  // Like a video
+  // Like a video (mock - just update local state)
   const likeVideo = async (videoId: string) => {
     try {
-      const updatedVideo = await localBackendApi.toggleLike(videoId);
-      
-      // Update local state
+      // Update local state - toggle like
       setVideos(prev => prev.map(v => 
-        v.id === videoId ? updatedVideo : v
+        v.id === videoId ? { ...v, likes: v.likes + 1 } : v
       ));
       setShorts(prev => prev.map(v => 
-        v.id === videoId ? updatedVideo : v
+        v.id === videoId ? { ...v, likes: v.likes + 1 } : v
       ));
-      
-      // Save to localStorage
-      localBackendApi.saveToLocalStorage();
     } catch (err: any) {
       console.error('❌ Error liking video:', err);
       setError(err.message);
@@ -226,7 +180,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     followUser,
     isFollowing,
     followedUsers,
-    isBackendConnected: backendInitialized,
+    isBackendConnected: false,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

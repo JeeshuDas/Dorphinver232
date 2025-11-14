@@ -3,7 +3,6 @@ import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
-import { videoDb, reactionDb, commentDb, followDb } from './db.tsx';
 
 const app = new Hono();
 
@@ -677,26 +676,7 @@ app.post('/make-server-148a8522/videos/upload', requireAuth, async (c) => {
       created_at: new Date().toISOString(),
     };
 
-    // Save to database (persistent storage)
-    try {
-      await videoDb.create(videoMetadata);
-      console.log('✅ Video saved to database successfully:', videoId);
-    } catch (dbError: any) {
-      console.error('❌ Database save error (will fallback to KV):', dbError);
-      // Fallback: save to KV if database fails
-      await kv.set(`video:${videoId}`, {
-        ...videoMetadata,
-        creatorId: userId,  // Keep both formats for compatibility
-        videoUrl: videoMetadata.video_url,
-        videoPath: videoMetadata.video_path,
-        thumbnailPath: videoMetadata.thumbnail_path,
-        shortCategory: videoMetadata.short_category,
-        creatorAvatar: videoMetadata.creator_avatar,
-        uploadDate: videoMetadata.upload_date,
-      });
-    }
-    
-    // Also save to KV for backwards compatibility and faster access
+    // Save to KV store
     await kv.set(`video:${videoId}`, {
       ...videoMetadata,
       creatorId: userId,  // Keep camelCase for compatibility
@@ -1041,7 +1021,7 @@ app.post('/make-server-148a8522/videos/:videoId/comments', requireAuth, async (c
   try {
     const userId = c.get('userId');
     const videoId = c.req.param('videoId');
-    const { text } = await c.req.json();
+    const { text, parentId } = await c.req.json();
 
     if (!text || text.trim().length === 0) {
       return c.json({ error: 'Comment text is required' }, 400);
@@ -1050,6 +1030,14 @@ app.post('/make-server-148a8522/videos/:videoId/comments', requireAuth, async (c
     const video = await kv.get(`video:${videoId}`);
     if (!video) {
       return c.json({ error: 'Video not found' }, 404);
+    }
+
+    // If parentId is provided, verify parent comment exists
+    if (parentId) {
+      const parentComment = await kv.get(`comment:${videoId}:${parentId}`);
+      if (!parentComment) {
+        return c.json({ error: 'Parent comment not found' }, 404);
+      }
     }
 
     const userProfile = await kv.get(`user:${userId}`);
@@ -1064,17 +1052,26 @@ app.post('/make-server-148a8522/videos/:videoId/comments', requireAuth, async (c
       text: text.trim(),
       time: 'just now',
       createdAt: new Date().toISOString(),
+      parentId: parentId || null,
     };
 
     await kv.set(`comment:${videoId}:${commentId}`, comment);
 
-    // Add to video's comments list
-    const commentsKey = `video:${videoId}:comments`;
-    const comments = await kv.get(commentsKey) || [];
-    comments.unshift(commentId);
-    await kv.set(commentsKey, comments);
+    // If it's a top-level comment, add to video's comments list
+    if (!parentId) {
+      const commentsKey = `video:${videoId}:comments`;
+      const comments = await kv.get(commentsKey) || [];
+      comments.unshift(commentId);
+      await kv.set(commentsKey, comments);
+    } else {
+      // If it's a reply, add to parent's replies list
+      const parentRepliesKey = `comment:${videoId}:${parentId}:replies`;
+      const replies = await kv.get(parentRepliesKey) || [];
+      replies.unshift(commentId);
+      await kv.set(parentRepliesKey, replies);
+    }
 
-    // Update comment count
+    // Update comment count (count all comments, including replies)
     video.comments = (video.comments || 0) + 1;
     await kv.set(`video:${videoId}`, video);
 
@@ -1085,7 +1082,7 @@ app.post('/make-server-148a8522/videos/:videoId/comments', requireAuth, async (c
   }
 });
 
-// Get comments for video
+// Get comments for video (with nested structure)
 app.get('/make-server-148a8522/videos/:videoId/comments', async (c) => {
   try {
     const videoId = c.req.param('videoId');
@@ -1098,8 +1095,36 @@ app.get('/make-server-148a8522/videos/:videoId/comments', async (c) => {
     const paginatedIds = commentIds.slice(offset, offset + limit);
     const comments = await kv.mget(paginatedIds.map(id => `comment:${videoId}:${id}`));
 
+    // Recursively fetch replies for each comment
+    const fetchReplies = async (commentId: string): Promise<any[]> => {
+      const repliesKey = `comment:${videoId}:${commentId}:replies`;
+      const replyIds = await kv.get(repliesKey) || [];
+      
+      if (replyIds.length === 0) return [];
+      
+      const replies = await kv.mget(replyIds.map(id => `comment:${videoId}:${id}`));
+      
+      // Recursively fetch nested replies
+      const repliesWithNested = await Promise.all(
+        replies.filter(r => r !== null).map(async (reply) => ({
+          ...reply,
+          replies: await fetchReplies(reply.id)
+        }))
+      );
+      
+      return repliesWithNested;
+    };
+
+    // Build comment tree
+    const commentsWithReplies = await Promise.all(
+      comments.filter(c => c !== null).map(async (comment) => ({
+        ...comment,
+        replies: await fetchReplies(comment.id)
+      }))
+    );
+
     return c.json({ 
-      comments: comments.filter(c => c !== null),
+      comments: commentsWithReplies,
       total: commentIds.length,
       hasMore: (offset + limit) < commentIds.length
     });

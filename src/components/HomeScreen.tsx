@@ -1,21 +1,19 @@
-import { useRef, useState, useEffect } from 'react';
-import { Video } from '../types';
-import { mockVideos } from '../data/mockData';
+import { useState, useRef, useEffect } from 'react';
+import { Video, Comment } from '../types';
+import { Heart, MessageCircle, Send, Menu, Play, Pause, Volume2, VolumeX, Smile, X, Search, TrendingUp, Zap, Gamepad2, UserCheck, UserPlus, Music, Mic2, Share2, Link, Download, Facebook, Instagram, Twitter, Check, LogIn, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useData } from '../providers/DataProvider';
-import { useAuth } from '../contexts/AuthContext';
-import { Smile, MessageCircle, Send, Menu, Play, Heart, Share2, Link, Download, Facebook, Instagram, Twitter, Trophy, Search, User, Check, LogIn } from 'lucide-react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
-import { Avatar, AvatarFallback } from './ui/avatar';
 import { SmileyIcon } from './SmileyIcon';
-import { toast } from 'sonner@2.0.3';
-import { copyToClipboard } from '../utils/clipboard';
+import { CommentThread } from './CommentThread';
+import { mockVideos } from '../data/mockData';
+import { Avatar, AvatarFallback } from './ui/avatar';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { copyToClipboard } from '../utils/clipboard';
+import { toast } from 'sonner';
 
 interface HomeScreenProps {
   onVideoClick: (video: Video) => void;
-  onShortClick: (categoryId: string, index: number) => void;
   onCreatorClick: (creatorId: string) => void;
   followedCreators: Set<string>;
   onFollowCreator?: (creatorId: string) => void;
@@ -24,20 +22,18 @@ interface HomeScreenProps {
   onSearchClick?: () => void;
   onShowAuthScreen?: () => void;
   onLogoClick?: () => void;
-  showShorts?: boolean;
-  shortsLimit?: number;
   currentUserId?: string;
   reactedVideos?: Set<string>;
   onReact?: (videoId: string) => void;
-  comments?: Record<string, Array<{id: string; user: string; avatar: string; text: string; time: string}>>;
-  onAddComment?: (videoId: string, text: string) => void;
+  comments?: Record<string, Array<Comment>>;
+  onAddComment?: (videoId: string, text: string, parentId?: string) => void;
   userAvatar?: string;
   userVideos?: Video[];
+  watchHistory?: Array<{ videoId: string; timestamp: number; lastWatchedAt: Date }>;
 }
 
 export function HomeScreen({ 
   onVideoClick, 
-  onShortClick, 
   onCreatorClick, 
   followedCreators,
   onFollowCreator, 
@@ -46,15 +42,14 @@ export function HomeScreen({
   onSearchClick, 
   onShowAuthScreen,
   onLogoClick,
-  showShorts = true, 
-  shortsLimit = 25,
   currentUserId = 'user_account',
   reactedVideos = new Set(),
   onReact,
   comments = {},
   onAddComment,
   userAvatar = 'UP',
-  userVideos = []
+  userVideos = [],
+  watchHistory = []
 }: HomeScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentlyPlayingId, setCurrentlyPlayingId] = useState<string | null>(null);
@@ -89,20 +84,12 @@ export function HomeScreen({
   };
   
   // Get data from API or fallback to mock
-  const { isAuthenticated } = useAuth();
-  const { videos: apiVideos, shorts: apiShorts, isLoading, isRefreshing } = useData();
   
-  // Get all long videos and shorts
-  // Use API data if authenticated, otherwise use mock data
+  // Get all long videos
+  // Use mock data since backend is removed
   const userLongVideos = userVideos.filter(v => v.category === 'long');
   const mockLongVideos = mockVideos.filter(v => v.category === 'long');
-  const apiLongVideos = isAuthenticated && apiVideos.length > 0 ? apiVideos : [];
-  const longVideos = apiLongVideos.length > 0 ? [...userLongVideos, ...apiLongVideos] : [...userLongVideos, ...mockLongVideos];
-  
-  const userShortsVideos = userVideos.filter(v => v.category === 'short');
-  const mockShortsVideos = mockVideos.filter(v => v.category === 'short');
-  const apiShortsVideos = isAuthenticated && apiShorts.length > 0 ? apiShorts : [];
-  const shortsVideos = (apiShortsVideos.length > 0 ? [...userShortsVideos, ...apiShortsVideos] : [...userShortsVideos, ...mockShortsVideos]).slice(0, shortsLimit);
+  const longVideos = [...userLongVideos, ...mockLongVideos];
 
   // Get unique creators from videos
   const allCreators = Array.from(new Map(
@@ -114,33 +101,6 @@ export function HomeScreen({
 
   return (
     <div ref={containerRef} className="h-full overflow-y-auto scrollbar-hide bg-background">
-      {/* Refresh Indicator */}
-      <AnimatePresence>
-        {isRefreshing && (
-          <motion.div
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full shadow-lg"
-            style={{
-              background: 'rgba(0, 0, 0, 0.75)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-            }}
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          >
-            <div className="flex items-center gap-2">
-              <motion.div
-                className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              />
-              <span className="text-white text-sm">Refreshing feed...</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
       <div className="flex items-center justify-between px-1 py-4 sticky top-0 bg-background/80 backdrop-blur-md z-20">
         <h1 className="cursor-pointer" style={{ fontFamily: 'Garet, sans-serif', fontSize: '2rem' }} onClick={onLogoClick}>dorphin</h1>
@@ -169,38 +129,25 @@ export function HomeScreen({
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
-            <Trophy className="w-4.5 h-4.5 text-muted-foreground" />
+            <TrendingUp className="w-4.5 h-4.5 text-muted-foreground" />
           </motion.button>
-          {!isAuthenticated ? (
-            <motion.button
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-ios flex items-center gap-2"
-              onClick={onShowAuthScreen}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            >
-              <LogIn className="w-4 h-4" />
-              <span className="text-sm">Login</span>
-            </motion.button>
-          ) : (
-            <motion.button
-              onClick={onProfileClick}
-              className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios flex items-center justify-center overflow-hidden"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            >
-              {userAvatar && (userAvatar.startsWith('http://') || userAvatar.startsWith('https://') || userAvatar.startsWith('data:image/')) ? (
-                <ImageWithFallback
-                  src={userAvatar}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-white text-sm">{userAvatar}</span>
-              )}
-            </motion.button>
-          )}
+          <motion.button
+            onClick={onProfileClick}
+            className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-400 to-pink-500 shadow-ios flex items-center justify-center overflow-hidden"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          >
+            {userAvatar && (userAvatar.startsWith('http://') || userAvatar.startsWith('https://') || userAvatar.startsWith('data:image/')) ? (
+              <ImageWithFallback
+                src={userAvatar}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-white text-sm">{userAvatar}</span>
+            )}
+          </motion.button>
         </div>
       </div>
 
@@ -252,39 +199,13 @@ export function HomeScreen({
         </div>
       )}
 
-      {/* First Square Video */}
-      <div className="px-1 mb-3 flex justify-center">
-        <SquareVideoCard 
-          video={longVideos[0]} 
-          onVideoClick={onVideoClick} 
-          index={0}
-          containerRef={containerRef}
-          currentlyPlayingId={currentlyPlayingId}
-          setCurrentlyPlayingId={setCurrentlyPlayingId}
-          currentUserId={currentUserId}
-          hasReacted={reactedVideos.has(longVideos[0].id)}
-          onReact={onReact}
-          comments={comments[longVideos[0].id] || []}
-          onAddComment={onAddComment}
-          followedCreators={followedCreators}
-          onFollowCreator={onFollowCreator}
-        />
-      </div>
-
-      {/* Shorts Row */}
-      {showShorts && (
-        <div className="px-1 pb-3">
-          <ShortsScrollRow shorts={shortsVideos} onVideoClick={onVideoClick} />
-        </div>
-      )}
-
-      {/* More Square Videos */}
-      {longVideos.slice(1).map((video, index) => (
+      {/* All Videos */}
+      {longVideos.map((video, index) => (
         <div key={video.id} className="px-1 mb-3 flex justify-center">
           <SquareVideoCard 
             video={video} 
             onVideoClick={onVideoClick} 
-            index={index + 1}
+            index={index}
             containerRef={containerRef}
             currentlyPlayingId={currentlyPlayingId}
             setCurrentlyPlayingId={setCurrentlyPlayingId}
@@ -326,8 +247,8 @@ function SquareVideoCard({
   currentUserId?: string;
   hasReacted?: boolean;
   onReact?: (videoId: string) => void;
-  comments?: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
-  onAddComment?: (videoId: string, text: string) => void;
+  comments?: Array<Comment>;
+  onAddComment?: (videoId: string, text: string, parentId?: string) => void;
   followedCreators?: Set<string>;
   onFollowCreator?: (creatorId: string) => void;
 }) {
@@ -415,7 +336,7 @@ function SquareVideoCard({
   return (
     <motion.div
       ref={cardRef}
-      className="relative w-full aspect-square rounded overflow-hidden shadow-ios-lg cursor-pointer max-w-[500px]"
+      className="relative w-full aspect-square rounded overflow-hidden shadow-ios-lg cursor-pointer max-w-[500px] bg-black"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -435,13 +356,46 @@ function SquareVideoCard({
       }}
       onClick={() => onVideoClick(video)}
     >
+      {/* Blurred Background for Fit Mode */}
+      {video.frameSettings?.mode === 'fit' && video.videoUrl && (
+        <div 
+          className="absolute inset-0 w-full h-full blur-3xl scale-110 opacity-40"
+          style={{
+            backgroundImage: `url(${video.thumbnail || ''})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        />
+      )}
+
       {/* Thumbnail (shown behind video or when not playing) */}
       {video.thumbnail && (
-        <img
-          src={video.thumbnail}
-          alt={video.title}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <>
+          {/* Blurred Background for Fit Mode */}
+          {video.thumbnailFrameSettings?.mode === 'fit' && (
+            <div 
+              className="absolute inset-0 w-full h-full blur-3xl scale-110 opacity-40"
+              style={{
+                backgroundImage: `url(${video.thumbnail})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}
+            />
+          )}
+          <img
+            src={video.thumbnail}
+            alt={video.title}
+            className="absolute inset-0 w-full h-full"
+            style={{
+              objectFit: video.thumbnailFrameSettings?.mode === 'fit' ? 'contain' : 'cover',
+              transform: video.thumbnailFrameSettings?.mode === 'fill' 
+                ? `scale(${video.thumbnailFrameSettings.zoom || 1}) translate(${(video.thumbnailFrameSettings.positionX || 0) / (video.thumbnailFrameSettings.zoom || 1)}px, ${(video.thumbnailFrameSettings.positionY || 0) / (video.thumbnailFrameSettings.zoom || 1)}px)`
+                : `scale(${video.thumbnailFrameSettings?.zoom || 1})`,
+              opacity: isPlaying ? 0 : 1,
+              transition: 'opacity 0.3s ease'
+            }}
+          />
+        </>
       )}
 
       {/* Video Element */}
@@ -449,11 +403,19 @@ function SquareVideoCard({
         <video
           ref={videoRef}
           data-video-id={video.id}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full"
           src={video.videoUrl}
           loop
           playsInline
-          style={{ opacity: isPlaying ? 1 : 0 }}
+          muted
+          style={{
+            objectFit: video.frameSettings?.mode === 'fit' ? 'contain' : 'cover',
+            transform: video.frameSettings?.mode === 'fill' 
+              ? `scale(${video.frameSettings.zoom || 1}) translate(${(video.frameSettings.positionX || 0) / (video.frameSettings.zoom || 1)}px, ${(video.frameSettings.positionY || 0) / (video.frameSettings.zoom || 1)}px)`
+              : `scale(${video.frameSettings?.zoom || 1})`,
+            opacity: isPlaying ? 1 : 0,
+            transition: 'opacity 0.3s ease'
+          }}
         />
       )}
 
@@ -594,106 +556,6 @@ function SquareVideoCard({
   );
 }
 
-function ShortsScrollRow({ shorts, onVideoClick }: { shorts: Video[]; onVideoClick: (video: Video) => void }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!scrollRef.current) return;
-    setIsDragging(true);
-    setStartX(e.pageX - scrollRef.current.offsetLeft);
-    setScrollLeft(scrollRef.current.scrollLeft);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !scrollRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - scrollRef.current.offsetLeft;
-    const walk = (x - startX) * 2;
-    scrollRef.current.scrollLeft = scrollLeft - walk;
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  return (
-    <div
-      ref={scrollRef}
-      className="flex gap-3 overflow-x-auto scrollbar-hide select-none"
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      {shorts.map((short, index) => (
-        <ShortCard key={short.id} video={short} index={index} onVideoClick={onVideoClick} />
-      ))}
-    </div>
-  );
-}
-
-function ShortCard({ video, index, onVideoClick }: { video: Video; index: number; onVideoClick: (video: Video) => void }) {
-  const [isHovered, setIsHovered] = useState(false);
-
-  return (
-    <motion.div
-      className="relative shrink-0 rounded overflow-hidden shadow-ios cursor-pointer"
-      style={{
-        width: 'calc((100vw - 2rem) * 0.6)',
-        maxWidth: '300px',
-        aspectRatio: '0.6',
-      }}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        type: "spring",
-        stiffness: 400,
-        damping: 25,
-        delay: index * 0.05
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onVideoClick(video)}
-      whileTap={{ scale: 0.98 }}
-    >
-      {/* Thumbnail */}
-      {video.thumbnail && (
-        <img
-          src={video.thumbnail}
-          alt={video.title}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
-
-      {/* Video */}
-      {video.videoUrl && (
-        <video
-          className="absolute inset-0 w-full h-full object-cover opacity-0"
-          src={video.videoUrl}
-          loop
-          muted
-          playsInline
-        />
-      )}
-
-      {/* Play Icon on Hover */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: isHovered ? 1 : 0.8, opacity: isHovered ? 1 : 0 }}
-          transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        >
-          <Play className="w-12 h-12 text-white/80" fill="white" />
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-}
-
 // Overlay Components for HomeScreen
 function HomeDetailsOverlay({ 
   video, 
@@ -792,14 +654,32 @@ function HomeCommentsOverlay({
 }: { 
   video: Video; 
   formatNumber: (num: number) => string;
-  comments: Array<{id: string; user: string; avatar: string; text: string; time: string}>;
-  onAddComment?: (videoId: string, text: string) => void;
+  comments: Array<Comment>;
+  onAddComment?: (videoId: string, text: string, parentId?: string) => void;
 }) {
   const [newComment, setNewComment] = useState('');
   
-  const mockComments = [
-    { id: '1', user: 'Alex Chen', avatar: '#8B5CF6', text: 'This is amazing! 🔥', time: '2h' },
-    { id: '2', user: 'Sarah Kim', avatar: '#EC4899', text: 'Love the creativity!', time: '5h' },
+  const mockComments: Comment[] = [
+    { 
+      id: '1', 
+      videoId: video.id,
+      userId: 'user1',
+      user: 'Alex Chen', 
+      avatar: '#8B5CF6', 
+      text: 'This is amazing! 🔥', 
+      time: '2h',
+      createdAt: new Date().toISOString(),
+    },
+    { 
+      id: '2', 
+      videoId: video.id,
+      userId: 'user2',
+      user: 'Sarah Kim', 
+      avatar: '#EC4899', 
+      text: 'Love the creativity!', 
+      time: '5h',
+      createdAt: new Date().toISOString(),
+    },
   ];
 
   const displayComments = comments.length > 0 ? comments : mockComments;
@@ -809,6 +689,12 @@ function HomeCommentsOverlay({
     if (newComment.trim() && onAddComment) {
       onAddComment(video.id, newComment.trim());
       setNewComment('');
+    }
+  };
+
+  const handleReply = (parentId: string, text: string) => {
+    if (onAddComment) {
+      onAddComment(video.id, text, parentId);
     }
   };
 
@@ -835,22 +721,14 @@ function HomeCommentsOverlay({
           Comments ({displayComments.length})
         </h3>
 
-        {/* Comments List */}
-        <div className="space-y-2 mb-3 overflow-y-auto flex-1 scrollbar-hide">
+        {/* Comments List with nested threads */}
+        <div className="space-y-2.5 mb-3 overflow-y-auto flex-1 scrollbar-hide">
           {displayComments.map((comment) => (
-            <div key={comment.id} className="flex gap-2">
-              <div 
-                className="w-7 h-7 rounded-full shrink-0"
-                style={{ backgroundColor: comment.avatar }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 mb-0.5">
-                  <p className="text-white text-xs truncate">{comment.user}</p>
-                  <span className="text-white/40 text-[10px]">{comment.time}</span>
-                </div>
-                <p className="text-white/70 text-xs leading-relaxed">{comment.text}</p>
-              </div>
-            </div>
+            <CommentThread
+              key={comment.id}
+              comment={comment}
+              onReply={handleReply}
+            />
           ))}
         </div>
 
